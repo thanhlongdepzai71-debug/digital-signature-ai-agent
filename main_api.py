@@ -3,6 +3,7 @@ import glob
 from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
+from pydantic import BaseModel
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.asymmetric import padding
 from cryptography.hazmat.primitives.serialization import load_pem_private_key, load_pem_public_key
@@ -23,12 +24,16 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 PRIVATE_KEY_PATH = os.path.join(BASE_DIR, "private_key.pem")
 PUBLIC_KEY_PATH = os.path.join(BASE_DIR, "public_key.pem")
 
-# Khởi tạo Gemini Client (lấy API Key tự động từ biến môi trường GEMINI_API_KEY)
+# Khởi tạo Gemini Client (lấy API Key tự động từ biến môi trường GEMINI_API_KEY trên Render)
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 ai_client = genai.Client(api_key=GEMINI_API_KEY) if GEMINI_API_KEY else None
 
+# Structure dữ liệu yêu cầu mật khẩu khi xóa
+class DeleteRequest(BaseModel):
+    password: str
 
-# Hàm hỗ trợ tự động ký số RSA PSS SHA-256
+
+# --- HÀM HỖ TRỢ KÝ SỐ TỰ ĐỘNG RSA SHA-256 ---
 def auto_sign_file(file_path: str):
     if not os.path.exists(PRIVATE_KEY_PATH):
         raise HTTPException(status_code=500, detail="Chưa tìm thấy file private_key.pem trên Server")
@@ -53,7 +58,7 @@ def auto_sign_file(file_path: str):
         sig_file.write(signature)
 
 
-# 1. API UPLOAD & TỰ ĐỘNG KÝ SỐ
+# --- 1. API UPLOAD & TỰ ĐỘNG KÝ SỐ ---
 @app.post("/upload")
 async def upload_audio(file: UploadFile = File(...)):
     try:
@@ -63,6 +68,7 @@ async def upload_audio(file: UploadFile = File(...)):
             content = await file.read()
             f.write(content)
 
+        # Tự động tạo file .sig
         auto_sign_file(file_path)
 
         return {
@@ -75,7 +81,7 @@ async def upload_audio(file: UploadFile = File(...)):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-# 2. API TRẢ VỀ DANH SÁCH FILE MP3 (JSON)
+# --- 2. API TRẢ VỀ DANH SÁCH FILE MP3 (JSON) ---
 @app.get("/download-audio-list")
 def get_audio_list():
     audio_files = []
@@ -85,7 +91,7 @@ def get_audio_list():
     return audio_files
 
 
-# 3. API TẢI / PHÁT FILE
+# --- 3. API PHÁT / TẢI FILE ---
 @app.get("/download/{file_name}")
 @app.get("/files/{file_name}")
 def download_file(file_name: str):
@@ -95,7 +101,7 @@ def download_file(file_name: str):
     return FileResponse(path=file_path, filename=file_name)
 
 
-# 4. API XÁC THỰC CHỮ KÝ SỐ + PHÂN TÍCH AI AGENT
+# --- 4. API XÁC THỰC CHỮ KÝ SỐ + PHÂN TÍCH AI AGENT ---
 @app.get("/verify")
 @app.get("/verify/{file_name}")
 def verify_signature(file_name: str):
@@ -117,6 +123,7 @@ def verify_signature(file_name: str):
         with open(PUBLIC_KEY_PATH, "rb") as f:
             public_key = load_pem_public_key(f.read())
 
+        # Xác minh chữ ký bằng RSA PSS SHA-256
         public_key.verify(
             signature,
             data,
@@ -159,7 +166,7 @@ def verify_signature(file_name: str):
         }
 
 
-# 5. API TÓM TẮT BÀI GIẢNG BẰNG AI AGENT (GEMINI)
+# --- 5. API AI AGENT TÓM TẮT BÀI GIẢNG ---
 @app.get("/ai-summarize/{file_name}")
 def summarize_lecture(file_name: str):
     file_path = os.path.join(BASE_DIR, file_name)
@@ -193,18 +200,26 @@ def summarize_lecture(file_name: str):
         }
 
 
-# 6. API XÓA BÀI GIẢNG VÀ CHỮ KÝ SỐ (QUYỀN TẢI LÊN / GIẢNG VIÊN)
+# --- 6. API XÓA BÀI GIẢNG (MẬT KHẨU BẢO MẬT: Duymt123456@) ---
 @app.delete("/delete/{file_name}")
-def delete_lecture(file_name: str):
+def delete_lecture(file_name: str, req: DeleteRequest):
+    # Mật khẩu xác thực cho Thầy
+    TEACHER_PASSWORD = os.getenv("TEACHER_PASSWORD", "Duymt123456@")
+
+    if req.password != TEACHER_PASSWORD:
+        raise HTTPException(status_code=401, detail="Mật khẩu Quản trị/Giảng viên không chính xác!")
+
     file_path = os.path.join(BASE_DIR, file_name)
     sig_path = os.path.join(BASE_DIR, f"{file_name}.sig")
 
     deleted_items = []
 
+    # Chỉ xóa đúng file được chọn
     if os.path.exists(file_path):
         os.remove(file_path)
         deleted_items.append(file_name)
 
+    # Xóa file chữ ký số tương ứng
     if os.path.exists(sig_path):
         os.remove(sig_path)
         deleted_items.append(f"{file_name}.sig")
@@ -214,6 +229,6 @@ def delete_lecture(file_name: str):
 
     return {
         "status": "success",
-        "message": f"Đã xóa thành công bài giảng '{file_name}' và chữ ký số đính kèm!",
+        "message": f"Xác thực thành công! Đã xóa bài giảng '{file_name}' và chữ ký số đính kèm.",
         "deleted_files": deleted_items
     }

@@ -149,7 +149,7 @@
                             <p class="text-muted mt-2">Chọn một bài giảng để phát âm thanh</p>
                         </div>
 
-                        <!-- KHU VỰC HIỂN THỊ TÓM TẮT BÀI GIẢNG BẰNG AI -->
+                        <!-- KHU VỰC HIỂN THỊ TÓM TẮT BÀI GIẢNG BẰNG AI AGENT -->
                         <div id="aiSummaryBox" class="mt-3 p-3 bg-light rounded text-start d-none border border-info shadow-sm">
                             <h6 class="fw-bold text-info"><i class="bi bi-robot"></i> AI Agent Tóm Tắt Bài Giảng:</h6>
                             <p id="aiSummaryContent" class="mb-0 small text-dark lh-base"></p>
@@ -221,7 +221,7 @@
                 if (response.ok) {
                     statusDiv.innerHTML = `<span class="text-success">✅ ${result.message}</span>`;
                     fileInput.value = '';
-                    fetchAudioList(); // Tải lại danh sách bài giảng ngay lập tức
+                    fetchAudioList(); // Tải lại danh sách ngay lập tức
                 } else {
                     statusDiv.innerHTML = `<span class="text-danger">❌ Lỗi: ${result.detail || 'Không thể upload tệp'}</span>`;
                 }
@@ -231,7 +231,7 @@
             }
         }
 
-        // 2. TẢI DANH SÁCH BÀI GIẢNG & THÊM NÚT XÓA QUYỀN THẦY
+        // 2. TẢI DANH SÁCH BÀI GIẢNG & TẠO NÚT XÓA TỪNG FILE
         async function fetchAudioList() {
             const container = document.getElementById("audioListContainer");
             const jsonPreview = document.getElementById("jsonPreview");
@@ -284,7 +284,7 @@
             }
         }
 
-        // 3. PHÁT AUDIO VÀ TÓM TẮT BÀI GIẢNG BẰNG AI AGENT
+        // 3. PHÁT AUDIO VÀ HIỂN THỊ TÓM TẮT AI AGENT
         async function playAudio(fileName) {
             const playerContainer = document.getElementById("mediaPlayerContainer");
             const summaryBox = document.getElementById("aiSummaryBox");
@@ -317,23 +317,32 @@
             }
         }
 
-        // 4. XÓA BÀI GIẢNG (QUYỀN THẦY / GIẢNG VIÊN)
+        // 4. XÓA BÀI GIẢNG DƯỚI QUYỀN THẦY (YÊU CẦU MẬT KHẨU)
         async function deleteAudio(fileName) {
-            if (!confirm(`Bạn (với quyền Giảng viên) có chắc chắn muốn xóa bài giảng "${fileName}" và chữ ký số đính kèm khỏi hệ thống?`)) {
+            const password = prompt(`🔒 XÁC NHẬN QUYỀN GIẢNG VIÊN:\nVui lòng nhập mật khẩu Quản trị để xóa bài giảng "${fileName}":`);
+
+            if (password === null) return;
+            if (password.trim() === "") {
+                alert("⚠️ Bạn chưa nhập mật khẩu!");
                 return;
             }
 
             try {
                 const response = await fetch(`${API_BASE}/delete/${encodeURIComponent(fileName)}`, {
-                    method: 'DELETE'
+                    method: 'DELETE',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ password: password })
                 });
+
                 const result = await response.json();
 
                 if (response.ok) {
                     alert(`✅ ${result.message}`);
-                    fetchAudioList(); // Tải lại danh sách bài giảng ngay lập tức
+                    fetchAudioList(); // Tải lại danh sách sau khi xóa thành công
                 } else {
-                    alert(`❌ Lỗi: ${result.detail || 'Không thể xóa bài giảng'}`);
+                    alert(`❌ Xóa thất bại: ${result.detail || 'Mật khẩu không đúng!'}`);
                 }
             } catch (error) {
                 alert("❌ Lỗi kết nối Server khi thực hiện xóa!");
@@ -387,7 +396,7 @@
             }
         }
 
-        // 6. TIỆN ÍCH TẢI JSON
+        // 6. TIỆN ÍCH TẢI JSON BÀI GIẢNG
         function downloadJsonFile() {
             const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(currentAudioJson, null, 2));
             const downloadAnchor = document.createElement('a');
