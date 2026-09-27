@@ -1,11 +1,10 @@
 import os
 import glob
 import logging
-from fastapi import FastAPI, UploadFile, File, HTTPException, Form
+from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel
-from typing import Optional
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.asymmetric import padding
 from cryptography.hazmat.primitives.serialization import load_pem_private_key, load_pem_public_key
@@ -14,7 +13,7 @@ from cryptography.hazmat.primitives.serialization import load_pem_private_key, l
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-app = FastAPI(title="Digital Signature & AI Agent Lecture Manager API", version="2.1.0")
+app = FastAPI(title="Digital Signature Lecture Manager API", version="2.2.0")
 
 # Bật CORS cho phép kết nối từ mọi nguồn (GitHub Pages)
 app.add_middleware(
@@ -28,18 +27,6 @@ app.add_middleware(
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 PRIVATE_KEY_PATH = os.path.join(BASE_DIR, "private_key.pem")
 PUBLIC_KEY_PATH = os.path.join(BASE_DIR, "public_key.pem")
-
-# Khởi tạo Gemini Client chuẩn SDK mới nhất
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-ai_client = None
-
-try:
-    from google import genai
-    if GEMINI_API_KEY:
-        ai_client = genai.Client(api_key=GEMINI_API_KEY)
-        logger.info("Đã khởi tạo Gemini Client thành công.")
-except Exception as e:
-    logger.warning(f"Không thể khởi tạo Gemini Client: {e}")
 
 # Structure dữ liệu yêu cầu mật khẩu khi xóa
 class DeleteRequest(BaseModel):
@@ -73,7 +60,7 @@ def auto_sign_file(file_path: str):
 
 @app.get("/")
 def read_root():
-    return {"status": "ok", "message": "Digital Signature & AI Agent API đang hoạt động ổn định!"}
+    return {"status": "ok", "message": "Digital Signature API đang hoạt động ổn định và mượt mà!"}
 
 
 # --- 1. API UPLOAD & TỰ ĐỘNG KÝ SỐ ---
@@ -106,11 +93,43 @@ def get_audio_list():
     if os.path.exists(BASE_DIR):
         for file in os.listdir(BASE_DIR):
             if file.endswith(".mp3"):
-                audio_files.append({"file_name": file})
+                sig_exists = os.path.exists(os.path.join(BASE_DIR, f"{file}.sig"))
+                audio_files.append({
+                    "file_name": file,
+                    "has_signature": sig_exists,
+                    "signature_file": f"{file}.sig" if sig_exists else None
+                })
     return audio_files
 
 
-# --- 3. API PHÁT / TẢI FILE ---
+# --- 3. API TẢI XUỐNG DANH SÁCH FILE ĐÃ KÝ DƯỚI DẠNG FILE JSON RIÊNG ---
+@app.get("/export-signed-list-json")
+def export_signed_list_json():
+    signed_records = []
+    if os.path.exists(BASE_DIR):
+        for file in os.listdir(BASE_DIR):
+            if file.endswith(".mp3"):
+                sig_path = os.path.join(BASE_DIR, f"{file}.sig")
+                signed_records.append({
+                    "file_name": file,
+                    "signed": os.path.exists(sig_path),
+                    "signature_filename": f"{file}.sig"
+                })
+    
+    # Trả về dưới dạng file JSON để trình duyệt tự động tải xuống
+    json_file_path = os.path.join(BASE_DIR, "signed_lectures_report.json")
+    import json
+    with open(json_file_path, "w", encoding="utf-8") as jf:
+        json.dump(signed_records, jf, ensure_ascii=False, indent=4)
+        
+    return FileResponse(
+        path=json_file_path, 
+        filename="signed_lectures_report.json", 
+        media_type="application/json"
+    )
+
+
+# --- 4. API PHÁT / TẢI FILE ---
 @app.get("/download/{file_name}")
 @app.get("/files/{file_name}")
 def download_file(file_name: str):
@@ -120,7 +139,7 @@ def download_file(file_name: str):
     return FileResponse(path=file_path, filename=file_name)
 
 
-# --- 4. API XÁC THỰC CHỮ KÝ SỐ + PHÂN TÍCH AI AGENT ---
+# --- 5. API XÁC THỰC CHỮ KÝ SỐ ---
 @app.get("/verify")
 @app.get("/verify/{file_name}")
 def verify_signature(file_name: str):
@@ -153,21 +172,10 @@ def verify_signature(file_name: str):
             hashes.SHA256()
         )
 
-        ai_comment = "Xác thực chữ ký số RSA thành công. Tệp nguyên vẹn."
-        if ai_client:
-            try:
-                prompt = f"Tệp bài giảng '{file_name}' đã được xác thực chữ ký số RSA PSS SHA-256 thành công. Hãy đưa ra 1 câu nhận xét ngắn gọn, chuyên nghiệp bằng tiếng Việt xác nhận tính toàn vẹn."
-                response = ai_client.models.generate_content(model='gemini-2.5-flash', contents=prompt)
-                if response and response.text:
-                    ai_comment = response.text.strip()
-            except Exception:
-                pass
-
         return {
             "status": "ACCEPTED",
             "valid": True,
-            "message": f"Xác thực thành công! Tệp '{file_name}' hợp lệ và giữ nguyên tính toàn vẹn.",
-            "ai_agent_analysis": ai_comment
+            "message": f"Xác thực thành công! Tệp '{file_name}' hợp lệ và giữ nguyên tính toàn vẹn chữ ký số RSA."
         }
 
     except Exception:
@@ -176,54 +184,6 @@ def verify_signature(file_name: str):
             "valid": False,
             "message": f"Xác thực thất bại! Tệp '{file_name}' đã bị chỉnh sửa hoặc chữ ký không khớp."
         }
-
-
-# --- 5. API AI AGENT TÓM TẮT BÀI GIẢNG (SIÊU ỔN ĐỊNH) ---
-@app.get("/ai-summarize/{file_name}")
-def summarize_lecture(file_name: str):
-    file_path = os.path.join(BASE_DIR, file_name)
-    if not os.path.exists(file_path):
-        raise HTTPException(status_code=404, detail=f"Không tìm thấy tệp {file_name}")
-
-    if not ai_client:
-        return {
-            "file_name": file_name,
-            "summary": "📌 Bài giảng âm thanh đã được xác thực toàn vẹn bằng chữ ký số. (Vui lòng cấu hình GEMINI_API_KEY trên Render)."
-        }
-
-    summary_text = ""
-    prompt = (
-        f"Bạn là Trợ lý AI Agent Quản lý Bài Giảng chuyên nghiệp. "
-        f"Học viên đang yêu cầu tóm tắt nội dung của bài giảng có tên: '{file_name}'. "
-        f"Hãy soạn một bản tóm tắt học thuật chất lượng cao bằng tiếng Việt gồm cấu trúc:\n"
-        f"1. **Tóm tắt cốt lõi:** Nội dung chính của bài giảng.\n"
-        f"2. **Điểm trọng tâm (Key Takeaways):** Các từ khóa, công thức hoặc khái niệm cần ghi nhớ.\n"
-        f"3. **Lưu ý ôn tập:** Lời khuyên để học viên nắm vững kiến thức."
-    )
-
-    # Danh sách model thông minh dự phòng
-    models = ['gemini-2.5-flash', 'gemini-2.5-flash-lite', 'gemini-2.0-flash']
-
-    for model_name in models:
-        try:
-            response = ai_client.models.generate_content(
-                model=model_name,
-                contents=prompt
-            )
-            if response and response.text:
-                summary_text = response.text.strip()
-                break
-        except Exception as e:
-            logger.warning(f"Model {model_name} lỗi: {e}")
-            continue
-
-    if not summary_text:
-        summary_text = "Trợ lý AI Agent đã xác thực tệp thành công, nhưng hệ thống AI đang bận, vui lòng thử lại sau giây lát."
-
-    return {
-        "file_name": file_name,
-        "summary": summary_text
-    }
 
 
 # --- 6. API XÓA BÀI GIẢNG (MẬT KHẨU BẢO MẬT) ---
