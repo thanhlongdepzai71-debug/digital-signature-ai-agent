@@ -4,239 +4,126 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Hệ Thống Ký Số & Quản Lý Bài Giảng</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <style>
-        body { background-color: #f8f9fa; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
-        .container { max-width: 1100px; margin-top: 30px; }
-        .card { border: none; border-radius: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); margin-bottom: 20px; }
-        .btn-custom { border-radius: 6px; }
-        pre { background: #212529; color: #f8f9fa; padding: 15px; border-radius: 8px; font-size: 0.85rem; max-height: 300px; overflow-y: auto; }
+        body { font-family: Arial, sans-serif; margin: 30px; background-color: #f4f7f6; color: #333; }
+        h1 { color: #0066cc; text-align: center; }
+        .container { display: flex; flex-wrap: wrap; gap: 20px; justify-content: center; }
+        .card { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); width: 45%; min-width: 320px; }
+        button { background-color: #28a745; color: white; border: none; padding: 10px 15px; border-radius: 4px; cursor: pointer; }
+        button:hover { background-color: #218838; }
+        .btn-blue { background-color: #007bff; }
+        .btn-blue:hover { background-color: #0056b3; }
+        input[type="file"], input[type="text"] { width: 100%; padding: 8px; margin: 10px 0; box-sizing: border-box; }
+        pre { background: #222; color: #00ff00; padding: 10px; border-radius: 5px; overflow-x: auto; max-height: 200px; }
+        ul { list-style-type: none; padding: 0; }
+        li { background: #e9ecef; margin: 5px 0; padding: 8px; border-radius: 4px; display: flex; justify-content: space-between; align-items: center; }
     </style>
 </head>
 <body>
 
-<div class="container">
-    <div class="text-center mb-4">
-        <h2 class="fw-bold text-primary">Hệ Thống Ký Số & Quản Lý Bài Giảng</h2>
-        <p class="text-muted">Tích hợp Chữ Ký Số RSA & Trợ Lý AI Agent Auto-Signing</p>
-    </div>
+    <h1>Hệ Thống Ký Số & Quản Lý Bài Giảng</h1>
+    <p style="text-align: center;">Tích hợp Chữ Ký Số RSA & Trợ Lý AI Agent Auto-Signing</p>
 
-    <div class="row">
-        <!-- CỘT TRÁI: Upload, Xác thực & Danh sách -->
-        <div class="col-md-7">
-            <!-- Khu vực Upload -->
-            <div class="card p-4">
-                <h5 class="card-title text-success mb-3">📁 Tải Bài Giảng Mới (Tự Động Ký Số RSA)</h5>
-                <form id="uploadForm" onsubmit="uploadFile(event)">
-                    <div class="mb-3">
-                        <input class="form-control" type="file" id="fileInput" required>
-                    </div>
-                    <button type="submit" class="btn btn-success btn-custom w-100">⬆️ Upload & Ký Số Ngay</button>
-                </form>
-                <div id="uploadStatus" class="mt-2 text-center fw-bold"></div>
-            </div>
-
-            <!-- Khu vực Xác thực -->
-            <div class="card p-4">
-                <h5 class="card-title text-primary mb-3">🔍 Kiểm Tra & Xác Thực Chữ Ký Số</h5>
-                <div class="input-group mb-3">
-                    <input type="text" id="verifyFileName" class="form-control" placeholder="Nhập tên tệp (vd: test.mp3)">
-                    <button class="btn btn-primary btn-custom" onclick="verifySignature()">Xác Thực</button>
-                </div>
-                <div id="verifyResult" class="alert d-none" role="alert"></div>
-            </div>
-
-            <!-- Danh sách bài giảng -->
-            <div class="card p-4">
-                <div class="d-flex justify-content-between align-items-center mb-3">
-                    <h5 class="card-title mb-0">📋 Danh Sách Bài Giảng & Tài Liệu</h5>
-                    <div>
-                        <button class="btn btn-outline-dark btn-sm btn-custom" onclick="downloadJsonReport()">📥 Tải JSON</button>
-                        <button class="btn btn-outline-primary btn-sm btn-custom" onclick="loadAudioList()">🔄 Tải lại</button>
-                    </div>
-                </div>
-                <div class="table-responsive">
-                    <table class="table table-hover align-middle">
-                        <tbody id="audioTableBody">
-                            <!-- Dữ liệu sẽ được load tự động bằng JS -->
-                        </tbody>
-                    </table>
-                </div>
-            </div>
+    <div class="container">
+        <!-- Card 1: Upload -->
+        <div class="card">
+            <h3>📂 Tải Bài Giảng Mới (Tự Động Ký Số RSA)</h3>
+            <form id="uploadForm">
+                <input type="file" id="fileInput" required>
+                <button type="submit">⬆ Upload & Ký Số Ngay</button>
+            </form>
+            <p id="uploadStatus" style="color: green; font-weight: bold; margin-top: 10px;"></p>
         </div>
 
-        <!-- CỘT PHẢI: Trình phát & JSON Preview -->
-        <div class="col-md-5">
-            <!-- Trình phát Media -->
-            <div class="card p-4">
-                <h5 class="card-title text-info mb-3">🎧 Trình Xem & Phát Bài Giảng</h5>
-                <div id="playerContainer" class="text-center text-muted">Chưa chọn tệp phát</div>
-            </div>
+        <!-- Card 2: JSON Data -->
+        <div class="card">
+            <h3>💻 Dữ Liệu JSON Danh Sách File</h3>
+            <pre id="jsonOutput">[]</pre>
+        </div>
 
-            <!-- JSON Preview -->
-            <div class="card p-4">
-                <h5 class="card-title text-secondary mb-3">💻 Dữ Liệu JSON Danh Sách File</h5>
-                <pre id="jsonPreview">Đang tải dữ liệu JSON...</pre>
-            </div>
+        <!-- Card 3: Danh Sách File -->
+        <div class="card" style="width: 93%;">
+            <h3>📋 Danh Sách Bài Giảng & Tài Liệu 
+                <button onclick="fetchFiles()" class="btn-blue" style="float: right;">🔄 Tải lại</button>
+            </h3>
+            <ul id="fileList">
+                <li>Đang tải danh sách...</li>
+            </ul>
         </div>
     </div>
-</div>
 
-<script>
-    // URL Backend trên Render của bạn
-    const API_BASE = "https://digital-signature-ai-agent.onrender.com";
+    <script>
+        // THAY ĐƯỜNG DẪN RENDER CỦA BẠN VÀO ĐÂY (không có dấu / ở cuối)
+        const API_BASE_URL = "https://YOUR_RENDER_URL.onrender.com"; 
 
-    async function loadAudioList() {
-        try {
-            let res = await fetch(API_BASE + "/download-audio-list");
-            let files = await res.json();
-            
-            // Cập nhật khung JSON preview bên phải
-            document.getElementById("jsonPreview").innerText = JSON.stringify(files, null, 4);
+        // Hàm lấy danh sách file từ Backend
+        async function fetchFiles() {
+            try {
+                const res = await fetch(`${API_BASE_URL}/files`);
+                const data = await res.json();
+                
+                // Hiển thị JSON
+                document.getElementById('jsonOutput').textContent = JSON.stringify(data, null, 2);
 
-            let tbody = document.getElementById("audioTableBody");
-            tbody.innerHTML = "";
+                // Hiển thị Danh sách UI
+                const listEl = document.getElementById('fileList');
+                listEl.innerHTML = '';
 
-            if (files.length === 0) {
-                tbody.innerHTML = `<tr><td colspan="2" class="text-center text-muted">Chưa có bài giảng nào trên hệ thống.</td></tr>`;
-                return;
+                if (!data || data.length === 0) {
+                    listEl.innerHTML = '<li>Chưa có bài giảng nào trên hệ thống.</li>';
+                    return;
+                }
+
+                data.forEach(item => {
+                    const li = document.createElement('li');
+                    li.innerHTML = `
+                        <span>📄 <b>${item.filename}</b> (${(item.size / 1024).toFixed(1)} KB)</span>
+                        <a href="${API_BASE_URL}/files/${item.filename}" target="_blank">
+                            <button class="btn-blue">Tải về / Xem</button>
+                        </a>
+                    `;
+                    listEl.appendChild(li);
+                });
+            } catch (err) {
+                console.error("Lỗi khi tải danh sách file:", err);
+                document.getElementById('fileList').innerHTML = '<li style="color:red;">Không thể kết nối đến máy chủ Backend!</li>';
             }
-
-            files.forEach(item => {
-                let tr = document.createElement("tr");
-                let badge = item.has_signature 
-                    ? `<span class="badge bg-success">Đã Ký Số RSA</span>` 
-                    : `<span class="badge bg-warning text-dark">Chưa có chữ ký</span>`;
-
-                tr.innerHTML = `
-                    <td>
-                        <div class="fw-bold">${item.file_name}</div>
-                        <small class="text-muted">${badge}</small>
-                    </td>
-                    <td class="text-end">
-                        <button class="btn btn-sm btn-outline-secondary btn-custom mb-1" onclick="playFile('${item.file_name}')">Phát</button>
-                        ${item.has_signature ? `<a href="${API_BASE}/files/${item.signature_file}" class="btn btn-sm btn-outline-info btn-custom mb-1" target="_blank" download>Tải .sig</a>` : ''}
-                        <button class="btn btn-sm btn-outline-primary btn-custom mb-1" onclick="quickVerify('${item.file_name}')">Xác minh</button>
-                        <button class="btn btn-sm btn-outline-danger btn-custom mb-1" onclick="deleteFile('${item.file_name}')">Xóa</button>
-                    </td>
-                `;
-                tbody.appendChild(tr);
-            });
-        } catch (e) {
-            console.error("Lỗi khi tải danh sách:", e);
-            document.getElementById("jsonPreview").innerText = "Lỗi kết nối server Render!";
         }
-    }
 
-    async function uploadFile(event) {
-        event.preventDefault();
-        let fileInput = document.getElementById("fileInput");
-        let statusDiv = document.getElementById("uploadStatus");
-        
-        let formData = new FormData();
-        formData.append("file", fileInput.files[0]);
+        // Xử lý Upload file
+        document.getElementById('uploadForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const fileInput = document.getElementById('fileInput');
+            if (!fileInput.files[0]) return;
 
-        statusDiv.innerHTML = "<span class='text-info'>Đang tải lên và ký số tự động...</span>";
+            const formData = new FormData();
+            formData.append('file', fileInput.files[0]);
 
-        try {
-            let res = await fetch(API_BASE + "/upload", {
-                method: "POST",
-                body: formData
-            });
-            let data = await res.json();
-            if (res.ok) {
-                statusDiv.innerHTML = `<span class='text-success'>${data.message}</span>`;
-                fileInput.value = "";
-                loadAudioList();
-            } else {
-                statusDiv.innerHTML = `<span class='text-danger'>Lỗi: ${data.detail}</span>`;
+            const statusEl = document.getElementById('uploadStatus');
+            statusEl.innerText = "Đang tải lên và ký số...";
+
+            try {
+                const res = await fetch(`${API_BASE_URL}/upload`, {
+                    method: 'POST',
+                    body: formData
+                });
+                const result = await res.json();
+
+                if (res.ok) {
+                    statusEl.innerText = result.message;
+                    fileInput.value = ''; // Reset ô chọn file
+                    fetchFiles(); // TỰ ĐỘNG CẬP NHẬT LẠI DANH SÁCH FILE NGAY LẬP TỨC!
+                } else {
+                    statusEl.innerText = "Lỗi: " + (result.detail || "Không thể tải file lên.");
+                }
+            } catch (err) {
+                console.error(err);
+                statusEl.innerText = "Lỗi kết nối máy chủ!";
             }
-        } catch (e) {
-            statusDiv.innerHTML = `<span class='text-danger'>Lỗi kết nối server!</span>`;
-        }
-    }
+        });
 
-    function playFile(fileName) {
-        let container = document.getElementById("playerContainer");
-        let ext = fileName.split('.').pop().toLowerCase();
-        
-        if (['mp3', 'wav', 'ogg'].includes(ext)) {
-            container.innerHTML = `
-                <p class="fw-bold text-truncate">${fileName}</p>
-                <audio controls class="w-100 mt-2">
-                    <source src="${API_BASE}/files/${fileName}" type="audio/${ext}">
-                    Trình duyệt không hỗ trợ thẻ audio.
-                </audio>
-            `;
-        } else if (['pdf'].includes(ext)) {
-            container.innerHTML = `
-                <p class="fw-bold text-truncate">${fileName}</p>
-                <a href="${API_BASE}/files/${fileName}" target="_blank" class="btn btn-primary btn-sm btn-custom">📄 Xem Tài Liệu PDF</a>
-            `;
-        } else {
-            container.innerHTML = `
-                <p class="fw-bold text-truncate">${fileName}</p>
-                <a href="${API_BASE}/files/${fileName}" class="btn btn-secondary btn-sm btn-custom">📥 Tải Tệp Về Máy</a>
-            `;
-        }
-    }
-
-    async function quickVerify(fileName) {
-        let res = await fetch(API_BASE + `/verify/${fileName}`);
-        let data = await res.json();
-        alert(data.message);
-    }
-
-    async function verifySignature() {
-        let fileName = document.getElementById("verifyFileName").value.trim();
-        let resultDiv = document.getElementById("verifyResult");
-        if (!fileName) {
-            alert("Vui lòng nhập tên tệp cần xác thực!");
-            return;
-        }
-
-        let res = await fetch(API_BASE + `/verify/${fileName}`);
-        let data = await res.json();
-
-        resultDiv.classList.remove("d-none", "alert-success", "alert-danger");
-        if (data.valid) {
-            resultDiv.classList.add("alert-success");
-            resultDiv.innerText = data.message;
-        } else {
-            resultDiv.classList.add("alert-danger");
-            resultDiv.innerText = data.message;
-        }
-    }
-
-    async function deleteFile(fileName) {
-        let password = prompt(`Nhập mật khẩu quản trị để xóa tệp "${fileName}":`);
-        if (!password) return;
-
-        try {
-            let res = await fetch(API_BASE + `/delete/${fileName}`, {
-                method: "DELETE",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ password: password })
-            });
-            let data = await res.json();
-            if (res.ok) {
-                alert(data.message);
-                loadAudioList();
-            } else {
-                alert("Lỗi: " + data.detail);
-            }
-        } catch (e) {
-            alert("Lỗi kết nối khi xóa tệp!");
-        }
-    }
-
-    function downloadJsonReport() {
-        window.open(API_BASE + "/export-signed-list-json", "_blank");
-    }
-
-    // Tự động tải danh sách khi mở trang
-    loadAudioList();
-</script>
-
+        // Tự động gọi tải danh sách lần đầu khi vừa mở trang
+        window.onload = fetchFiles;
+    </script>
 </body>
 </html>
