@@ -143,7 +143,7 @@ def verify_signature(file_name: str):
                     f"Hãy đưa ra 1 câu nhận xét ngắn gọn, chuyên nghiệp bằng tiếng Việt xác nhận tính toàn vẹn của bài giảng này."
                 )
                 response = ai_client.models.generate_content(
-                    model='gemini-2.5-flash',
+                    model='gemini-3.8-flash',
                     contents=prompt,
                 )
                 if response.text:
@@ -185,7 +185,7 @@ def summarize_lecture(file_name: str):
             f"Hãy đưa ra bản tóm tắt ngắn gọn, dễ hiểu và các điểm trọng tâm cần lưu ý cho học viên đối với bài giảng ghi âm có tên '{file_name}'."
         )
         response = ai_client.models.generate_content(
-            model='gemini-2.5-flash',
+            model='gemini-3.8-flash',
             contents=prompt,
         )
 
@@ -203,7 +203,6 @@ def summarize_lecture(file_name: str):
 # --- 6. API XÓA BÀI GIẢNG (MẬT KHẨU BẢO MẬT: Duymt123456@) ---
 @app.delete("/delete/{file_name}")
 def delete_lecture(file_name: str, req: DeleteRequest):
-    # Mật khẩu xác thực cho Thầy
     TEACHER_PASSWORD = os.getenv("TEACHER_PASSWORD", "Duymt123456@")
 
     if req.password != TEACHER_PASSWORD:
@@ -214,12 +213,10 @@ def delete_lecture(file_name: str, req: DeleteRequest):
 
     deleted_items = []
 
-    # Chỉ xóa đúng file được chọn
     if os.path.exists(file_path):
         os.remove(file_path)
         deleted_items.append(file_name)
 
-    # Xóa file chữ ký số tương ứng
     if os.path.exists(sig_path):
         os.remove(sig_path)
         deleted_items.append(f"{file_name}.sig")
