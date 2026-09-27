@@ -81,28 +81,23 @@ def sign_generic_file(file_path: str) -> str:
     """Ký số RSA cho file âm thanh & file bất kỳ (Tạo chữ ký rời .sig & nén file .zip)"""
     key_path, _ = ensure_keys_exist()
 
-    # Read private key
     with open(key_path, "rb") as kf:
         private_key = serialization.load_pem_private_key(kf.read(), password=None)
 
-    # Read binary content of uploaded file
     with open(file_path, "rb") as f:
         data = f.read()
 
-    # Generate RSA SHA-256 signature
     signature = private_key.sign(data, padding.PKCS1v15(), hashes.SHA256())
 
     sig_path = f"{file_path}.sig"
     with open(sig_path, "wb") as sf:
         sf.write(signature)
 
-    # Create ZIP containing both original audio/file and signature file
     zip_path = f"{file_path}.zip"
     with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zipf:
         zipf.write(file_path, arcname=os.path.basename(file_path))
         zipf.write(sig_path, arcname=os.path.basename(sig_path))
 
-    # Clean temporary .sig file
     if os.path.exists(sig_path):
         os.remove(sig_path)
 
@@ -120,13 +115,10 @@ def upload_file(file: UploadFile = File(...)):
     signed_path = os.path.join(UPLOAD_DIR, file.filename)
 
     try:
-        # 1. Lưu file nhận được
         with open(raw_path, "wb") as f:
             f.write(file.file.read())
 
-        # 2. Phân loại định dạng xử lý
         if file.filename.lower().endswith(".pdf"):
-            # Ký số nhúng cho PDF
             signer = get_pdf_signer()
             sig_field_name = f"Sig_{int(time.time())}"
 
@@ -149,7 +141,6 @@ def upload_file(file: UploadFile = File(...)):
             msg = f"Đã tự động ký số RSA thành công cho file PDF {file.filename}!"
 
         else:
-            # Ký số rời cho file âm thanh/loại file khác (Tạo gói ZIP chứa file + .sig)
             zip_filename = f"{file.filename}.zip"
             zip_output_path = os.path.join(UPLOAD_DIR, zip_filename)
 
@@ -195,3 +186,17 @@ def get_file(filename: str):
     if not os.path.exists(file_path):
         raise HTTPException(status_code=404, detail="File không tồn tại")
     return FileResponse(file_path)
+
+
+# --- ENDPOINT XÓA FILE ---
+@app.delete("/delete/{filename}")
+def delete_file(filename: str):
+    file_path = os.path.join(UPLOAD_DIR, filename)
+    if not os.path.exists(file_path):
+        raise HTTPException(status_code=404, detail="File không tồn tại")
+    
+    try:
+        os.remove(file_path)
+        return {"message": f"Đã xóa thành công file {filename}"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Không thể xóa file: {str(e)}")
