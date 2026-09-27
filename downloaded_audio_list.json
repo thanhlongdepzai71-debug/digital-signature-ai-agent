@@ -1,0 +1,20 @@
+[
+    {
+        "id": 1,
+        "student_id": "SV001",
+        "file_name": "test.mp3",
+        "signature_file": "test.mp3.sig",
+        "status": "ACCEPTED",
+        "timestamp": "2026-09-27 10:30:00",
+        "download_url": "http://127.0.0.1:8000/files/test.mp3"
+    },
+    {
+        "id": 2,
+        "student_id": "SV002",
+        "file_name": "ghi_am_gia_mao.mp3",
+        "signature_file": "ghi_am_gia_mao.mp3.sig",
+        "status": "REJECTED",
+        "timestamp": "2026-09-27 10:32:15",
+        "download_url": "http://127.0.0.1:8000/files/ghi_am_gia_mao.mp3"
+    }
+]
