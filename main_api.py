@@ -3,10 +3,9 @@ from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 
-# Thư viện phục vụ ký số PDF
+# Thư viện ký số pyhanko
 from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
 from pyhanko.sign import fields, signers
-from pyhanko.sign.general import load_cert_from_pemder
 
 app = FastAPI(title="Digital Signature AI Agent API")
 
@@ -23,12 +22,11 @@ KEYS_DIR = "keys"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 os.makedirs(KEYS_DIR, exist_ok=True)
 
-# Hàm tự động tạo cặp khóa RSA & Khai báo Signer nếu chưa có
+# Hàm tự động tạo cặp khóa RSA & Khai báo Signer
 def get_pdf_signer():
     key_path = os.path.join(KEYS_DIR, "selfsigned.key")
     cert_path = os.path.join(KEYS_DIR, "selfsigned.cert")
 
-    # Nếu chưa có file khóa tự tạo, khởi tạo bằng cryptography
     if not (os.path.exists(key_path) and os.path.exists(cert_path)):
         from cryptography import x509
         from cryptography.x509.oid import NameOID
@@ -68,16 +66,16 @@ def read_root():
     return {"status": "ok", "message": "Digital Signature AI Agent API is running!"}
 
 
+# LƯU Ý: Dùng 'def' thay vì 'async def' để tránh lỗi event loop
 @app.post("/upload")
-async def upload_file(file: UploadFile = File(...)):
-    try:
-        raw_path = os.path.join(UPLOAD_DIR, f"raw_{file.filename}")
-        signed_path = os.path.join(UPLOAD_DIR, file.filename)
+def upload_file(file: UploadFile = File(...)):
+    raw_path = os.path.join(UPLOAD_DIR, f"raw_{file.filename}")
+    signed_path = os.path.join(UPLOAD_DIR, file.filename)
 
+    try:
         # 1. Lưu file gốc ban đầu
         with open(raw_path, "wb") as f:
-            content = await file.read()
-            f.write(content)
+            f.write(file.file.read())
 
         # 2. Xử lý Ký số nếu là file PDF
         if file.filename.lower().endswith(".pdf"):
@@ -94,11 +92,10 @@ async def upload_file(file: UploadFile = File(...)):
                         signer=signer,
                         output=outf,
                     )
-            # Xóa file tạm
+            # Xóa file tạm gốc sau khi đã tạo file có chữ ký
             if os.path.exists(raw_path):
                 os.remove(raw_path)
         else:
-            # Nếu không phải PDF thì đổi tên file tạm thành file chính
             os.rename(raw_path, signed_path)
 
         return {
@@ -106,7 +103,6 @@ async def upload_file(file: UploadFile = File(...)):
             "filename": file.filename
         }
     except Exception as e:
-        # Nếu ký thất bại vẫn giữ lại file gốc
         if os.path.exists(raw_path) and not os.path.exists(signed_path):
             os.rename(raw_path, signed_path)
         raise HTTPException(status_code=500, detail=f"Lỗi ký số: {str(e)}")
