@@ -1,4 +1,5 @@
 import os
+import time
 import datetime
 from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -10,7 +11,6 @@ from pyhanko.sign import fields, signers
 
 app = FastAPI(title="Digital Signature AI Agent API")
 
-# Cấu hình CORS để cho phép Frontend (GitHub Pages) truy cập
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -36,7 +36,6 @@ def get_pdf_signer():
         from cryptography.hazmat.primitives import hashes, serialization
         from cryptography.hazmat.primitives.asymmetric import rsa
 
-        # Tạo khóa tư RSA 2048-bit
         key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
         with open(key_path, "wb") as f:
             f.write(
@@ -47,7 +46,6 @@ def get_pdf_signer():
                 )
             )
 
-        # Tạo chứng thư số Self-Signed
         subject = issuer = x509.Name(
             [
                 x509.NameAttribute(
@@ -80,8 +78,6 @@ def read_root():
     return {"status": "ok", "message": "Digital Signature AI Agent API is running!"}
 
 
-# LƯU Ý: Dùng 'def' thay vì 'async def' để FastAPI chạy endpoint trong threadpool riêng,
-# tránh xung đột event loop khi pyhanko thực hiện thao tác ký số ngầm.
 @app.post("/upload")
 def upload_file(file: UploadFile = File(...)):
     raw_path = os.path.join(UPLOAD_DIR, f"raw_{file.filename}")
@@ -95,15 +91,18 @@ def upload_file(file: UploadFile = File(...)):
         # 2. Nếu là file PDF thì tiến hành ký số RSA bằng PyHanko
         if file.filename.lower().endswith(".pdf"):
             signer = get_pdf_signer()
+            # Đặt tên field chữ ký ngẫu nhiên/động theo timestamp để tránh trùng lặp Signature1
+            sig_field_name = f"Sig_{int(time.time())}"
+            
             with open(raw_path, "rb") as inf:
                 w = IncrementalPdfFileWriter(inf)
                 fields.append_signature_field(
-                    w, sig_field_spec=fields.SigFieldSpec(sig_field_name="Signature1")
+                    w, sig_field_spec=fields.SigFieldSpec(sig_field_name=sig_field_name)
                 )
                 with open(signed_path, "wb") as outf:
                     signers.sign_pdf(
                         w,
-                        signers.PdfSignatureMetadata(field_name="Signature1"),
+                        signers.PdfSignatureMetadata(field_name=sig_field_name),
                         signer=signer,
                         output=outf,
                     )
@@ -111,7 +110,6 @@ def upload_file(file: UploadFile = File(...)):
             if os.path.exists(raw_path):
                 os.remove(raw_path)
         else:
-            # File dạng khác PDF thì giữ nguyên
             os.rename(raw_path, signed_path)
 
         return {
@@ -119,7 +117,6 @@ def upload_file(file: UploadFile = File(...)):
             "filename": file.filename,
         }
     except Exception as e:
-        # Khôi phục file nếu có lỗi xảy ra trong quá trình ký
         if os.path.exists(raw_path) and not os.path.exists(signed_path):
             os.rename(raw_path, signed_path)
         raise HTTPException(status_code=500, detail=f"Lỗi ký số: {str(e)}")
