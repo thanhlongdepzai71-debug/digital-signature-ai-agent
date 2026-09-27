@@ -7,9 +7,9 @@ from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.asymmetric import padding
 from cryptography.hazmat.primitives.serialization import load_pem_private_key, load_pem_public_key
 
-app = FastAPI()
+app = FastAPI(title="Digital Signature AI Agent API")
 
-# Bật CORS để Web GitHub Pages gọi API từ Render mượt mà
+# Bật CORS
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -18,14 +18,14 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-UPLOAD_DIR = "."
-PRIVATE_KEY_PATH = "private_key.pem"
-PUBLIC_KEY_PATH = "public_key.pem"
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+PRIVATE_KEY_PATH = os.path.join(BASE_DIR, "private_key.pem")
+PUBLIC_KEY_PATH = os.path.join(BASE_DIR, "public_key.pem")
 
-# --- HÀM HỖ TRỢ KÝ SỐ TỰ ĐỘNG ---
+# Hàm hỗ trợ tự động ký số RSA
 def auto_sign_file(file_path: str):
     if not os.path.exists(PRIVATE_KEY_PATH):
-        raise Exception("Không tìm thấy file private_key.pem trên Server!")
+        raise HTTPException(status_code=500, detail="Chưa tìm thấy file private_key.pem trên Server")
 
     with open(PRIVATE_KEY_PATH, "rb") as key_file:
         private_key = load_pem_private_key(key_file.read(), password=None)
@@ -46,19 +46,16 @@ def auto_sign_file(file_path: str):
     with open(sig_path, "wb") as sig_file:
         sig_file.write(signature)
 
-
-# --- 1. API UPLOAD & TỰ ĐỘNG KÝ SỐ ---
+# 1. API UPLOAD & TỰ ĐỘNG KÝ SỐ
 @app.post("/upload")
 async def upload_audio(file: UploadFile = File(...)):
     try:
-        file_path = os.path.join(UPLOAD_DIR, file.filename)
+        file_path = os.path.join(BASE_DIR, file.filename)
 
-        # Lưu file tải lên
         with open(file_path, "wb") as f:
             content = await file.read()
             f.write(content)
 
-        # Tự động ký số tạo file .sig
         auto_sign_file(file_path)
 
         return {
@@ -70,56 +67,49 @@ async def upload_audio(file: UploadFile = File(...)):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-
-# --- 2. API TRẢ VỀ DANH SÁCH FILE AUDIO (JSON) ---
+# 2. API DANH SÁCH FILE MP3
 @app.get("/download-audio-list")
-async def get_audio_list():
-    # Lấy toàn bộ file .mp3 trong thư mục
-    mp3_files = glob.glob("*.mp3")
-    result = [{"file_name": f} for f in mp3_files]
-    return result
+def get_audio_list():
+    audio_files = []
+    for file in os.listdir(BASE_DIR):
+        if file.endswith(".mp3"):
+            audio_files.append({"file_name": file})
+    return audio_files
 
+# 3. API TẢI/PHÁT FILE
+@app.get("/download/{file_name}")
+@app.get("/files/{file_name}")
+def download_file(file_name: str):
+    file_path = os.path.join(BASE_DIR, file_name)
+    if not os.path.exists(file_path):
+        raise HTTPException(status_code=404, detail="Không tìm thấy tệp yêu cầu")
+    return FileResponse(path=file_path, filename=file_name)
 
-# --- 3. API PHÁT/TẢI FILE AUDIO HOẶC TÀI LIỆU ---
-@app.get("/files/{filename}")
-async def get_file(filename: str):
-    file_path = os.path.join(UPLOAD_DIR, filename)
-    if os.path.exists(file_path):
-        return FileResponse(file_path)
-    raise HTTPException(status_code=404, detail="File không tồn tại!")
-
-
-# --- 4. API XÁC THỰC CHỮ KÝ SỐ ---
-@app.get("/verify/{filename}")
-async def verify_signature(filename: str):
-    file_path = os.path.join(UPLOAD_DIR, filename)
-    sig_path = f"{file_path}.sig"
+# 4. API XÁC THỰC CHỮ KÝ SỐ
+@app.get("/verify")
+@app.get("/verify/{file_name}")
+def verify_signature(file_name: str):
+    file_path = os.path.join(BASE_DIR, file_name)
+    sig_path = os.path.join(BASE_DIR, f"{file_name}.sig")
 
     if not os.path.exists(file_path):
-        return {"status": "REJECTED", "message": f"Không tìm thấy file {filename}"}
+        return {"status": "REJECTED", "valid": False, "message": f"Tệp {file_name} không tồn tại."}
     
     if not os.path.exists(sig_path):
-        return {"status": "REJECTED", "message": f"Không tìm thấy file chữ ký {filename}.sig"}
-
-    if not os.path.exists(PUBLIC_KEY_PATH):
-        return {"status": "REJECTED", "message": "Không tìm thấy Public Key trên Server"}
+        return {"status": "REJECTED", "valid": False, "message": f"Không tìm thấy file chữ ký số ({file_name}.sig)."}
 
     try:
-        # Đọc public key
-        with open(PUBLIC_KEY_PATH, "rb") as key_file:
-            public_key = load_pem_public_key(key_file.read())
-
-        # Đọc dữ liệu file và chữ ký
         with open(file_path, "rb") as f:
-            file_data = f.read()
+            data = f.read()
+        with open(sig_path, "rb") as f:
+            signature = f.read()
 
-        with open(sig_path, "rb") as sig_f:
-            signature = sig_f.read()
+        with open(PUBLIC_KEY_PATH, "rb") as f:
+            public_key = load_pem_public_key(f.read())
 
-        # Xác thực chữ ký RSA
         public_key.verify(
             signature,
-            file_data,
+            data,
             padding.PSS(
                 mgf=padding.MGF1(hashes.SHA256()),
                 salt_length=padding.PSS.MAX_LENGTH
@@ -128,10 +118,12 @@ async def verify_signature(filename: str):
         )
         return {
             "status": "ACCEPTED",
-            "message": f"Chữ ký hợp lệ! File {filename} toàn vẹn và đúng do tác giả ký."
+            "valid": True,
+            "message": f"Xác thực thành công! Tệp '{file_name}' hợp lệ và giữ nguyên tính toàn vẹn."
         }
     except Exception:
         return {
             "status": "REJECTED",
-            "message": f"Chữ ký KHÔNG hợp lệ! File {filename} có thể đã bị can thiệp/sửa đổi."
+            "valid": False,
+            "message": f"Xác thực thất bại! Tệp '{file_name}' đã bị chỉnh sửa hoặc chữ ký không khớp."
         }
