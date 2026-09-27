@@ -39,7 +39,7 @@
             color: #d4d4d4;
             padding: 15px;
             border-radius: 8px;
-            max-height: 220px;
+            max-height: 200px;
             overflow-y: auto;
             font-size: 0.85rem;
         }
@@ -103,7 +103,8 @@
                                 <i id="resultIcon" class="bi me-2 fs-4"></i>
                                 <div>
                                     <h6 id="resultTitle" class="alert-heading mb-1 fw-bold"></h6>
-                                    <p id="resultMessage" class="mb-0 small"></p>
+                                    <p id="resultMessage" class="mb-1 small"></p>
+                                    <p id="aiAnalysisText" class="mb-0 small fst-italic text-secondary border-top pt-1 mt-1"></p>
                                 </div>
                             </div>
                         </div>
@@ -135,9 +136,9 @@
 
             </div>
 
-            <!-- Cột phải: Trình phát & Khung Dữ Liệu JSON -->
+            <!-- Cột phải: Trình phát, AI Tóm Tắt & Khung JSON -->
             <div class="col-lg-5">
-                <!-- Trình Phát Bài Giảng -->
+                <!-- Trình Phát Bài Giảng & AI Tóm Tắt -->
                 <div class="card">
                     <div class="card-header text-dark">
                         <i class="bi bi-play-circle"></i> Trình Xem & Phát Bài Giảng
@@ -146,6 +147,12 @@
                         <div id="mediaPlayerContainer" class="py-3">
                             <i class="bi bi-file-earmark-play text-muted display-1"></i>
                             <p class="text-muted mt-2">Chọn một bài giảng để phát âm thanh</p>
+                        </div>
+
+                        <!-- KHU VỰC HIỂN THỊ TÓM TẮT BÀI GIẢNG BẰNG AI -->
+                        <div id="aiSummaryBox" class="mt-3 p-3 bg-light rounded text-start d-none border border-info shadow-sm">
+                            <h6 class="fw-bold text-info"><i class="bi bi-robot"></i> AI Agent Tóm Tắt Bài Giảng:</h6>
+                            <p id="aiSummaryContent" class="mb-0 small text-dark lh-base"></p>
                         </div>
                     </div>
                 </div>
@@ -224,7 +231,7 @@
             }
         }
 
-        // 2. TẢI DANH SÁCH BÀI GIẢNG
+        // 2. TẢI DANH SÁCH BÀI GIẢNG & THÊM NÚT XÓA QUYỀN THẦY
         async function fetchAudioList() {
             const container = document.getElementById("audioListContainer");
             const jsonPreview = document.getElementById("jsonPreview");
@@ -249,19 +256,22 @@
                     itemElement.className = "list-group-item file-item d-flex justify-content-between align-items-center p-3";
                     
                     itemElement.innerHTML = `
-                        <div class="d-flex align-items-center">
+                        <div class="d-flex align-items-center me-2 overflow-hidden">
                             <i class="bi bi-file-earmark-music text-primary fs-3 me-3"></i>
-                            <div>
-                                <h6 class="mb-1 text-dark fw-semibold">${fileName}</h6>
+                            <div class="text-truncate">
+                                <h6 class="mb-1 text-dark fw-semibold text-truncate">${fileName}</h6>
                                 <span class="badge bg-light text-secondary border">Bài Giảng Audio</span>
                             </div>
                         </div>
-                        <div>
+                        <div class="btn-group-sm flex-shrink-0">
                             <button class="btn btn-sm btn-outline-primary me-1" onclick="playAudio('${fileName}')">
                                 <i class="bi bi-play-fill"></i> Phát
                             </button>
-                            <button class="btn btn-sm btn-outline-success" onclick="quickVerify('${fileName}')">
+                            <button class="btn btn-sm btn-outline-success me-1" onclick="quickVerify('${fileName}')">
                                 <i class="bi bi-shield-check"></i> Xác minh
+                            </button>
+                            <button class="btn btn-sm btn-outline-danger" onclick="deleteAudio('${fileName}')">
+                                <i class="bi bi-trash"></i> Xóa
                             </button>
                         </div>
                     `;
@@ -274,7 +284,64 @@
             }
         }
 
-        // 3. XÁC THỰC CHỮ KÝ SỐ
+        // 3. PHÁT AUDIO VÀ TÓM TẮT BÀI GIẢNG BẰNG AI AGENT
+        async function playAudio(fileName) {
+            const playerContainer = document.getElementById("mediaPlayerContainer");
+            const summaryBox = document.getElementById("aiSummaryBox");
+            const summaryContent = document.getElementById("aiSummaryContent");
+
+            // Hiển thị trình phát nhạc
+            playerContainer.innerHTML = `
+                <h6 class="fw-bold mb-3 text-primary text-truncate">${fileName}</h6>
+                <audio controls autoplay class="w-100">
+                    <source src="${API_BASE}/files/${encodeURIComponent(fileName)}" type="audio/mpeg">
+                    Trình duyệt của bạn không hỗ trợ phát âm thanh.
+                </audio>
+            `;
+
+            // Gọi API AI Tóm Tắt Bài Giảng
+            summaryBox.classList.remove("d-none");
+            summaryContent.innerHTML = `<span class="spinner-border spinner-border-sm text-info me-1"></span> AI Agent đang đọc và tóm tắt bài giảng...`;
+
+            try {
+                const response = await fetch(`${API_BASE}/ai-summarize/${encodeURIComponent(fileName)}`);
+                const data = await response.json();
+
+                if (response.ok) {
+                    summaryContent.innerText = data.summary;
+                } else {
+                    summaryContent.innerHTML = `<span class="text-muted">Không thể lấy bản tóm tắt (${data.detail || 'Lỗi AI'})</span>`;
+                }
+            } catch (error) {
+                summaryContent.innerHTML = `<span class="text-muted">Đã phát nhạc thành công. Không lấy được tóm tắt từ AI Agent.</span>`;
+            }
+        }
+
+        // 4. XÓA BÀI GIẢNG (QUYỀN THẦY / GIẢNG VIÊN)
+        async function deleteAudio(fileName) {
+            if (!confirm(`Bạn (với quyền Giảng viên) có chắc chắn muốn xóa bài giảng "${fileName}" và chữ ký số đính kèm khỏi hệ thống?`)) {
+                return;
+            }
+
+            try {
+                const response = await fetch(`${API_BASE}/delete/${encodeURIComponent(fileName)}`, {
+                    method: 'DELETE'
+                });
+                const result = await response.json();
+
+                if (response.ok) {
+                    alert(`✅ ${result.message}`);
+                    fetchAudioList(); // Tải lại danh sách bài giảng ngay lập tức
+                } else {
+                    alert(`❌ Lỗi: ${result.detail || 'Không thể xóa bài giảng'}`);
+                }
+            } catch (error) {
+                alert("❌ Lỗi kết nối Server khi thực hiện xóa!");
+                console.error(error);
+            }
+        }
+
+        // 5. XÁC THỰC CHỮ KÝ SỐ
         async function verifyFile(fileName) {
             const btnVerify = document.getElementById("btnVerify");
             const verifyResult = document.getElementById("verifyResult");
@@ -282,6 +349,7 @@
             const resultIcon = document.getElementById("resultIcon");
             const resultTitle = document.getElementById("resultTitle");
             const resultMessage = document.getElementById("resultMessage");
+            const aiAnalysisText = document.getElementById("aiAnalysisText");
 
             btnVerify.disabled = true;
             btnVerify.innerHTML = `<span class="spinner-border spinner-border-sm me-1"></span> Đang xử lý...`;
@@ -293,30 +361,33 @@
                 verifyResult.classList.remove("d-none");
 
                 if (data.status === "ACCEPTED" || data.status === "SUCCESS" || data.valid === true) {
-                    resultAlert.className = "alert alert-success d-flex align-items-center";
+                    resultAlert.className = "alert alert-success align-items-center";
                     resultIcon.className = "bi bi-check-circle-fill me-2 fs-4 text-success";
                     resultTitle.innerText = "Chữ Ký Số Hợp Lệ (ACCEPTED)";
-                    resultMessage.innerText = data.message || `Tệp "${fileName}" đảm bảo tính toàn vẹn và do chính chủ ký.`;
+                    resultMessage.innerText = data.message || `Tệp "${fileName}" đảm bảo tính toàn vẹn.`;
+                    aiAnalysisText.innerText = data.ai_agent_analysis ? `🤖 AI Agent: ${data.ai_agent_analysis}` : "";
                 } else {
-                    resultAlert.className = "alert alert-danger d-flex align-items-center";
+                    resultAlert.className = "alert alert-danger align-items-center";
                     resultIcon.className = "bi bi-x-circle-fill me-2 fs-4 text-danger";
                     resultTitle.innerText = "Xác Thực Thất Bại (REJECTED)";
                     resultMessage.innerText = data.message || `Tệp "${fileName}" đã bị chỉnh sửa hoặc chữ ký số không hợp lệ.`;
+                    aiAnalysisText.innerText = "";
                 }
             } catch (error) {
                 console.error("Lỗi xác thực:", error);
                 verifyResult.classList.remove("d-none");
-                resultAlert.className = "alert alert-warning d-flex align-items-center";
+                resultAlert.className = "alert alert-warning align-items-center";
                 resultIcon.className = "bi bi-exclamation-triangle-fill me-2 fs-4 text-warning";
                 resultTitle.innerText = "Lỗi Kết Nối Server";
                 resultMessage.innerText = "Không thể kết nối tới Backend AI Agent trên Render.";
+                aiAnalysisText.innerText = "";
             } finally {
                 btnVerify.disabled = false;
                 btnVerify.innerHTML = `<i class="bi bi-search"></i> Xác Thực`;
             }
         }
 
-        // 4. TIỆN ÍCH
+        // 6. TIỆN ÍCH TẢI JSON
         function downloadJsonFile() {
             const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(currentAudioJson, null, 2));
             const downloadAnchor = document.createElement('a');
@@ -325,17 +396,6 @@
             document.body.appendChild(downloadAnchor);
             downloadAnchor.click();
             downloadAnchor.remove();
-        }
-
-        function playAudio(fileName) {
-            const playerContainer = document.getElementById("mediaPlayerContainer");
-            playerContainer.innerHTML = `
-                <h6 class="fw-bold mb-3 text-primary">${fileName}</h6>
-                <audio controls autoplay class="w-100">
-                    <source src="${API_BASE}/files/${encodeURIComponent(fileName)}" type="audio/mpeg">
-                    Trình duyệt của bạn không hỗ trợ phát âm thanh.
-                </audio>
-            `;
         }
 
         function quickVerify(fileName) {
