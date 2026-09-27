@@ -39,7 +39,7 @@
             color: #d4d4d4;
             padding: 15px;
             border-radius: 8px;
-            max-height: 250px;
+            max-height: 220px;
             overflow-y: auto;
             font-size: 0.85rem;
         }
@@ -51,15 +51,35 @@
     <div class="header-banner">
         <div class="container text-center">
             <h1 class="fw-bold"><i class="bi bi-shield-check"></i> Hệ Thống Xác Thực & Quản Lý Bài Giảng</h1>
-            <p class="lead mb-0">Tích hợp Chữ Ký Số RSA & Trợ Lý AI Agent</p>
+            <p class="lead mb-0">Tích hợp Chữ Ký Số RSA & Trợ Lý AI Agent Auto-Signing</p>
         </div>
     </div>
 
     <div class="container pb-5">
         <div class="row">
-            <!-- Cột trái: Xác thực tệp & Danh sách -->
+            <!-- Cột trái: Upload, Xác thực & Danh sách -->
             <div class="col-lg-7">
-                <!-- Thẻ Xác Thực Tệp -->
+                
+                <!-- THẺ 1: UPLOAD & TỰ ĐỘNG KÝ SỐ TRÊN CLOUD -->
+                <div class="card border-start border-4 border-success">
+                    <div class="card-header text-success">
+                        <i class="bi bi-cloud-arrow-up-fill"></i> Tải Bài Giảng Mới Up (Tự Động Ký Số RSA)
+                    </div>
+                    <div class="card-body">
+                        <p class="text-muted small mb-3">
+                            Chọn tệp âm thanh (.mp3) hoặc tài liệu (.pdf, .docx). AI Agent trên Cloud sẽ tự động lưu và khởi tạo Chữ ký số RSA (.sig) ngay lập tức.
+                        </p>
+                        <div class="input-group">
+                            <input type="file" class="form-control" id="audioFileInput" accept=".mp3,.wav,.pdf,.docx">
+                            <button class="btn btn-success px-4" type="button" onclick="uploadAndAutoSign()">
+                                <i class="bi bi-upload"></i> Upload & Ký Số
+                            </button>
+                        </div>
+                        <div id="uploadStatus" class="mt-2 fw-semibold small"></div>
+                    </div>
+                </div>
+
+                <!-- THẺ 2: XÁC THỰC CHỮ KÝ SỐ -->
                 <div class="card">
                     <div class="card-header text-primary">
                         <i class="bi bi-file-earmark-lock"></i> Kiểm Tra & Xác Thực Chữ Ký Số
@@ -69,12 +89,11 @@
                             <div class="mb-3">
                                 <label for="fileNameInput" class="form-label fw-semibold">Tên Tệp Bài Giảng / Tài Liệu:</label>
                                 <div class="input-group">
-                                    <input type="text" class="form-control" id="fileNameInput" placeholder="Ví dụ: test.pdf, test.docx, test.mp3" required>
+                                    <input type="text" class="form-control" id="fileNameInput" placeholder="Ví dụ: test.mp3, bai_giang.pdf" required>
                                     <button class="btn btn-primary px-4" type="submit" id="btnVerify">
                                         <i class="bi bi-search"></i> Xác Thực
                                     </button>
                                 </div>
-                                <div class="form-text">Nhập chính xác tên tệp đã bao gồm phần mở rộng (.pdf, .docx, .mp3).</div>
                             </div>
                         </form>
 
@@ -91,10 +110,10 @@
                     </div>
                 </div>
 
-                <!-- Thẻ Danh Sách Bài Giảng Audio & Nút xuất JSON -->
+                <!-- THẺ 3: DANH SÁCH BÀI GIẢNG ÂM THANH -->
                 <div class="card">
-                    <div class="card-header d-flex justify-content-between align-items-center text-success">
-                        <span><i class="bi bi-music-note-list"></i> Danh Sách Bài Giảng Âm Thanh</span>
+                    <div class="card-header d-flex justify-content-between align-items-center text-dark">
+                        <span><i class="bi bi-music-note-list text-success"></i> Danh Sách Bài Giảng Âm Thanh</span>
                         <div>
                             <button class="btn btn-sm btn-outline-dark me-1" onclick="downloadJsonFile()">
                                 <i class="bi bi-filetype-json"></i> Tải JSON
@@ -113,9 +132,10 @@
                         </div>
                     </div>
                 </div>
+
             </div>
 
-            <!-- Cột phải: Trình phát & Khung xem Dữ Liệu JSON -->
+            <!-- Cột phải: Trình phát & Khung Dữ Liệu JSON -->
             <div class="col-lg-5">
                 <!-- Trình Phát Bài Giảng -->
                 <div class="card">
@@ -125,27 +145,27 @@
                     <div class="card-body text-center">
                         <div id="mediaPlayerContainer" class="py-3">
                             <i class="bi bi-file-earmark-play text-muted display-1"></i>
-                            <p class="text-muted mt-2">Chọn một bài giảng hoặc tập tin để xem chi tiết</p>
+                            <p class="text-muted mt-2">Chọn một bài giảng để phát âm thanh</p>
                         </div>
                     </div>
                 </div>
 
-                <!-- Thẻ Dữ Liệu JSON Danh Sách File -->
+                <!-- Dữ Liệu JSON Trả Về -->
                 <div class="card">
                     <div class="card-header text-warning d-flex justify-content-between align-items-center">
-                        <span><i class="bi bi-code-slash"></i> Dữ Liệu JSON Trả Về Từ API</span>
-                        <a id="rawJsonLink" href="#" target="_blank" class="btn btn-sm btn-link text-decoration-none p-0">Mở URL API <i class="bi bi-box-arrow-up-right"></i></a>
+                        <span><i class="bi bi-code-slash"></i> Dữ Liệu JSON Danh Sách File</span>
+                        <a id="rawJsonLink" href="#" target="_blank" class="btn btn-sm btn-link text-decoration-none p-0">Mở API <i class="bi bi-box-arrow-up-right"></i></a>
                     </div>
                     <div class="card-body">
-                        <p class="text-muted small mb-2">Định dạng JSON danh sách file audio trả về từ endpoint <code>/download-audio-list</code>:</p>
-                        <pre id="jsonPreview"><code>Đang tải dữ liệu JSON...</code></pre>
+                        <p class="text-muted small mb-2">JSON cấu trúc trả về từ endpoint <code>/download-audio-list</code>:</p>
+                        <pre id="jsonPreview"><code>Đang tải dữ liệu...</code></pre>
                     </div>
                 </div>
             </div>
         </div>
     </div>
 
-    <!-- Bootstrap & JS Scripts -->
+    <!-- Scripts -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 
     <script>
@@ -167,49 +187,44 @@
             document.getElementById("btnRefreshList").addEventListener("click", fetchAudioList);
         });
 
-        // Hàm gọi API xác thực tệp (/verify)
-        async function verifyFile(fileName) {
-            const btnVerify = document.getElementById("btnVerify");
-            const verifyResult = document.getElementById("verifyResult");
-            const resultAlert = document.getElementById("resultAlert");
-            const resultIcon = document.getElementById("resultIcon");
-            const resultTitle = document.getElementById("resultTitle");
-            const resultMessage = document.getElementById("resultMessage");
+        // 1. UPLOAD & TỰ ĐỘNG KÝ SỐ
+        async function uploadAndAutoSign() {
+            const fileInput = document.getElementById('audioFileInput');
+            const statusDiv = document.getElementById('uploadStatus');
+            
+            if (!fileInput.files || fileInput.files.length === 0) {
+                statusDiv.innerHTML = '<span class="text-danger">⚠️ Vui lòng chọn một tệp bài giảng!</span>';
+                return;
+            }
 
-            btnVerify.disabled = true;
-            btnVerify.innerHTML = `<span class="spinner-border spinner-border-sm me-1"></span> Đang xử lý...`;
+            const file = fileInput.files[0];
+            const formData = new FormData();
+            formData.append('file', file);
+
+            statusDiv.innerHTML = '<span class="text-info"><span class="spinner-border spinner-border-sm me-1"></span> Đang tải lên Server và thực hiện Ký số RSA...</span>';
 
             try {
-                const response = await fetch(`${API_BASE}/verify?file_name=${encodeURIComponent(fileName)}`);
-                const data = await response.json();
+                const response = await fetch(`${API_BASE}/upload`, {
+                    method: 'POST',
+                    body: formData
+                });
 
-                verifyResult.classList.remove("d-none");
+                const result = await response.json();
 
-                if (data.status === "SUCCESS" || data.valid === true) {
-                    resultAlert.className = "alert alert-success d-flex align-items-center";
-                    resultIcon.className = "bi bi-check-circle-fill me-2 fs-4 text-success";
-                    resultTitle.innerText = "Chữ Ký Số Hợp Lệ (ACCEPTED)";
-                    resultMessage.innerText = data.message || `Tệp "${fileName}" đảm bảo tính toàn vẹn và do tác giả chính thức ký.`;
+                if (response.ok) {
+                    statusDiv.innerHTML = `<span class="text-success">✅ ${result.message}</span>`;
+                    fileInput.value = '';
+                    fetchAudioList(); // Tải lại danh sách bài giảng ngay lập tức
                 } else {
-                    resultAlert.className = "alert alert-danger d-flex align-items-center";
-                    resultIcon.className = "bi bi-x-circle-fill me-2 fs-4 text-danger";
-                    resultTitle.innerText = "Xác Thực Thất Bại (REJECTED)";
-                    resultMessage.innerText = data.message || `Tệp "${fileName}" đã bị chỉnh sửa hoặc chữ ký số không hợp lệ.`;
+                    statusDiv.innerHTML = `<span class="text-danger">❌ Lỗi: ${result.detail || 'Không thể upload tệp'}</span>`;
                 }
             } catch (error) {
-                console.error("Lỗi xác thực:", error);
-                verifyResult.classList.remove("d-none");
-                resultAlert.className = "alert alert-warning d-flex align-items-center";
-                resultIcon.className = "bi bi-exclamation-triangle-fill me-2 fs-4 text-warning";
-                resultTitle.innerText = "Lỗi Kết Nối Server";
-                resultMessage.innerText = "Không thể kết nối tới Backend AI Agent trên Render.";
-            } finally {
-                btnVerify.disabled = false;
-                btnVerify.innerHTML = `<i class="bi bi-search"></i> Xác Thực`;
+                statusDiv.innerHTML = `<span class="text-danger">❌ Lỗi kết nối API Server Render!</span>`;
+                console.error(error);
             }
         }
 
-        // Hàm lấy danh sách bài giảng âm thanh (/download-audio-list)
+        // 2. TẢI DANH SÁCH BÀI GIẢNG
         async function fetchAudioList() {
             const container = document.getElementById("audioListContainer");
             const jsonPreview = document.getElementById("jsonPreview");
@@ -254,12 +269,54 @@
                 });
             } catch (error) {
                 console.error("Lỗi lấy danh sách bài giảng:", error);
-                container.innerHTML = `<div class="p-3 text-center text-danger"><i class="bi bi-exclamation-circle me-1"></i> Không thể tải danh sách bài giảng từ Server.</div>`;
-                jsonPreview.textContent = "// Lỗi không thể tải JSON từ Server";
+                container.innerHTML = `<div class="p-3 text-center text-danger"><i class="bi bi-exclamation-circle me-1"></i> Không thể tải danh sách từ Server.</div>`;
+                jsonPreview.textContent = "// Lỗi không thể kết nối API Server";
             }
         }
 
-        // Tải xuống file .json trực tiếp
+        // 3. XÁC THỰC CHỮ KÝ SỐ
+        async function verifyFile(fileName) {
+            const btnVerify = document.getElementById("btnVerify");
+            const verifyResult = document.getElementById("verifyResult");
+            const resultAlert = document.getElementById("resultAlert");
+            const resultIcon = document.getElementById("resultIcon");
+            const resultTitle = document.getElementById("resultTitle");
+            const resultMessage = document.getElementById("resultMessage");
+
+            btnVerify.disabled = true;
+            btnVerify.innerHTML = `<span class="spinner-border spinner-border-sm me-1"></span> Đang xử lý...`;
+
+            try {
+                const response = await fetch(`${API_BASE}/verify/${encodeURIComponent(fileName)}`);
+                const data = await response.json();
+
+                verifyResult.classList.remove("d-none");
+
+                if (data.status === "ACCEPTED" || data.status === "SUCCESS" || data.valid === true) {
+                    resultAlert.className = "alert alert-success d-flex align-items-center";
+                    resultIcon.className = "bi bi-check-circle-fill me-2 fs-4 text-success";
+                    resultTitle.innerText = "Chữ Ký Số Hợp Lệ (ACCEPTED)";
+                    resultMessage.innerText = data.message || `Tệp "${fileName}" đảm bảo tính toàn vẹn và do chính chủ ký.`;
+                } else {
+                    resultAlert.className = "alert alert-danger d-flex align-items-center";
+                    resultIcon.className = "bi bi-x-circle-fill me-2 fs-4 text-danger";
+                    resultTitle.innerText = "Xác Thực Thất Bại (REJECTED)";
+                    resultMessage.innerText = data.message || `Tệp "${fileName}" đã bị chỉnh sửa hoặc chữ ký số không hợp lệ.`;
+                }
+            } catch (error) {
+                console.error("Lỗi xác thực:", error);
+                verifyResult.classList.remove("d-none");
+                resultAlert.className = "alert alert-warning d-flex align-items-center";
+                resultIcon.className = "bi bi-exclamation-triangle-fill me-2 fs-4 text-warning";
+                resultTitle.innerText = "Lỗi Kết Nối Server";
+                resultMessage.innerText = "Không thể kết nối tới Backend AI Agent trên Render.";
+            } finally {
+                btnVerify.disabled = false;
+                btnVerify.innerHTML = `<i class="bi bi-search"></i> Xác Thực`;
+            }
+        }
+
+        // 4. TIỆN ÍCH
         function downloadJsonFile() {
             const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(currentAudioJson, null, 2));
             const downloadAnchor = document.createElement('a');
@@ -270,19 +327,17 @@
             downloadAnchor.remove();
         }
 
-        // Phát bài giảng
         function playAudio(fileName) {
             const playerContainer = document.getElementById("mediaPlayerContainer");
             playerContainer.innerHTML = `
                 <h6 class="fw-bold mb-3 text-primary">${fileName}</h6>
                 <audio controls autoplay class="w-100">
-                    <source src="${API_BASE}/download/${encodeURIComponent(fileName)}" type="audio/mpeg">
-                    Trình duyệt của bạn không hỗ trợ trình phát âm thanh.
+                    <source src="${API_BASE}/files/${encodeURIComponent(fileName)}" type="audio/mpeg">
+                    Trình duyệt của bạn không hỗ trợ phát âm thanh.
                 </audio>
             `;
         }
 
-        // Xác minh nhanh
         function quickVerify(fileName) {
             document.getElementById("fileNameInput").value = fileName;
             verifyFile(fileName);
