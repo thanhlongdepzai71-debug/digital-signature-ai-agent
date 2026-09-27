@@ -1,5 +1,6 @@
 import os
 import time
+import zipfile
 import datetime
 from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -8,6 +9,12 @@ from fastapi.responses import FileResponse
 # Thư viện phục vụ ký số PDF
 from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
 from pyhanko.sign import fields, signers
+
+# Thư viện mã hóa RSA cho file tổng quát (Âm thanh, Video, Docx...)
+from cryptography import x509
+from cryptography.x509.oid import NameOID
+from cryptography.hazmat.primitives import hashes, serialization
+from cryptography.hazmat.primitives.asymmetric import rsa, padding
 
 app = FastAPI(title="Digital Signature AI Agent API")
 
@@ -25,17 +32,12 @@ os.makedirs(UPLOAD_DIR, exist_ok=True)
 os.makedirs(KEYS_DIR, exist_ok=True)
 
 
-def get_pdf_signer():
-    """Tự động khởi tạo và nạp cặp khóa RSA / Chứng thư số self-signed nếu chưa có"""
+def ensure_keys_exist():
+    """Khởi tạo cặp khóa RSA & Khai báo Chứng thư số nếu chưa tồn tại"""
     key_path = os.path.join(KEYS_DIR, "selfsigned.key")
     cert_path = os.path.join(KEYS_DIR, "selfsigned.cert")
 
     if not (os.path.exists(key_path) and os.path.exists(cert_path)):
-        from cryptography import x509
-        from cryptography.x509.oid import NameOID
-        from cryptography.hazmat.primitives import hashes, serialization
-        from cryptography.hazmat.primitives.asymmetric import rsa
-
         key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
         with open(key_path, "wb") as f:
             f.write(
@@ -47,11 +49,7 @@ def get_pdf_signer():
             )
 
         subject = issuer = x509.Name(
-            [
-                x509.NameAttribute(
-                    NameOID.COMMON_NAME, u"Digital Signature AI Agent"
-                ),
-            ]
+            [x509.NameAttribute(NameOID.COMMON_NAME, u"Digital Signature AI Agent")]
         )
         cert = (
             x509.CertificateBuilder()
@@ -70,7 +68,45 @@ def get_pdf_signer():
         with open(cert_path, "wb") as f:
             f.write(cert.public_bytes(serialization.Encoding.PEM))
 
+    return key_path, cert_path
+
+
+def get_pdf_signer():
+    """Lấy signer dùng cho PyHanko (File PDF)"""
+    key_path, cert_path = ensure_keys_exist()
     return signers.SimpleSigner.load(key_path, cert_path)
+
+
+def sign_generic_file(file_path: str) -> str:
+    """Ký số RSA cho file âm thanh & file bất kỳ (Tạo chữ ký rời .sig & nén file .zip)"""
+    key_path, _ = ensure_keys_exist()
+
+    # Read private key
+    with open(key_path, "rb") as kf:
+        private_key = serialization.load_pem_private_key(kf.read(), password=None)
+
+    # Read binary content of uploaded file
+    with open(file_path, "rb") as f:
+        data = f.read()
+
+    # Generate RSA SHA-256 signature
+    signature = private_key.sign(data, padding.PKCS1v15(), hashes.SHA256())
+
+    sig_path = f"{file_path}.sig"
+    with open(sig_path, "wb") as sf:
+        sf.write(signature)
+
+    # Create ZIP containing both original audio/file and signature file
+    zip_path = f"{file_path}.zip"
+    with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zipf:
+        zipf.write(file_path, arcname=os.path.basename(file_path))
+        zipf.write(sig_path, arcname=os.path.basename(sig_path))
+
+    # Clean temporary .sig file
+    if os.path.exists(sig_path):
+        os.remove(sig_path)
+
+    return zip_path
 
 
 @app.get("/")
@@ -84,16 +120,16 @@ def upload_file(file: UploadFile = File(...)):
     signed_path = os.path.join(UPLOAD_DIR, file.filename)
 
     try:
-        # 1. Lưu file nhận được vào đĩa
+        # 1. Lưu file nhận được
         with open(raw_path, "wb") as f:
             f.write(file.file.read())
 
-        # 2. Nếu là file PDF thì tiến hành ký số RSA bằng PyHanko
+        # 2. Phân loại định dạng xử lý
         if file.filename.lower().endswith(".pdf"):
+            # Ký số nhúng cho PDF
             signer = get_pdf_signer()
-            # Đặt tên field chữ ký ngẫu nhiên/động theo timestamp để tránh trùng lặp Signature1
             sig_field_name = f"Sig_{int(time.time())}"
-            
+
             with open(raw_path, "rb") as inf:
                 w = IncrementalPdfFileWriter(inf)
                 fields.append_signature_field(
@@ -106,16 +142,34 @@ def upload_file(file: UploadFile = File(...)):
                         signer=signer,
                         output=outf,
                     )
-            # Xóa file chưa ký tạm thời sau khi ký xong
             if os.path.exists(raw_path):
                 os.remove(raw_path)
+
+            final_filename = file.filename
+            msg = f"Đã tự động ký số RSA thành công cho file PDF {file.filename}!"
+
         else:
-            os.rename(raw_path, signed_path)
+            # Ký số rời cho file âm thanh/loại file khác (Tạo gói ZIP chứa file + .sig)
+            zip_filename = f"{file.filename}.zip"
+            zip_output_path = os.path.join(UPLOAD_DIR, zip_filename)
+
+            zip_created = sign_generic_file(raw_path)
+
+            if os.path.exists(zip_output_path):
+                os.remove(zip_output_path)
+            os.rename(zip_created, zip_output_path)
+
+            if os.path.exists(raw_path):
+                os.remove(raw_path)
+
+            final_filename = zip_filename
+            msg = f"Đã tạo file chữ ký rời RSA (.sig) và đóng gói dạng .zip thành công cho {file.filename}!"
 
         return {
-            "message": f"Đã tải lên và tự động ký số RSA thành công cho {file.filename}!",
-            "filename": file.filename,
+            "message": msg,
+            "filename": final_filename,
         }
+
     except Exception as e:
         if os.path.exists(raw_path) and not os.path.exists(signed_path):
             os.rename(raw_path, signed_path)
