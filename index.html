@@ -1,129 +1,189 @@
 <!DOCTYPE html>
 <html lang="vi">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Hệ Thống Ký Số & Quản Lý Bài Giảng</title>
-    <style>
-        body { font-family: Arial, sans-serif; margin: 30px; background-color: #f4f7f6; color: #333; }
-        h1 { color: #0066cc; text-align: center; }
-        .container { display: flex; flex-wrap: wrap; gap: 20px; justify-content: center; }
-        .card { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); width: 45%; min-width: 320px; }
-        button { background-color: #28a745; color: white; border: none; padding: 10px 15px; border-radius: 4px; cursor: pointer; }
-        button:hover { background-color: #218838; }
-        .btn-blue { background-color: #007bff; }
-        .btn-blue:hover { background-color: #0056b3; }
-        input[type="file"], input[type="text"] { width: 100%; padding: 8px; margin: 10px 0; box-sizing: border-box; }
-        pre { background: #222; color: #00ff00; padding: 10px; border-radius: 5px; overflow-x: auto; max-height: 200px; }
-        ul { list-style-type: none; padding: 0; }
-        li { background: #e9ecef; margin: 5px 0; padding: 8px; border-radius: 4px; display: flex; justify-content: space-between; align-items: center; }
-    </style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Hệ Thống Ký Số & Quản Lý Bài Giảng</title>
+  <!-- Bootstrap 5 CSS -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <style>
+    body {
+      background-color: #f8f9fa;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    }
+    .card {
+      border-radius: 12px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+      border: none;
+    }
+    .json-box {
+      background-color: #1e1e1e;
+      color: #00ff66;
+      font-family: monospace;
+      padding: 15px;
+      border-radius: 8px;
+      max-height: 250px;
+      overflow-y: auto;
+    }
+  </style>
 </head>
 <body>
 
-    <h1>Hệ Thống Ký Số & Quản Lý Bài Giảng</h1>
-    <p style="text-align: center;">Tích hợp Chữ Ký Số RSA & Trợ Lý AI Agent Auto-Signing</p>
-
-    <div class="container">
-        <!-- Card 1: Upload -->
-        <div class="card">
-            <h3>📂 Tải Bài Giảng Mới (Tự Động Ký Số RSA)</h3>
-            <form id="uploadForm">
-                <input type="file" id="fileInput" required>
-                <button type="submit">⬆ Upload & Ký Số Ngay</button>
-            </form>
-            <p id="uploadStatus" style="color: green; font-weight: bold; margin-top: 10px;"></p>
-        </div>
-
-        <!-- Card 2: JSON Data -->
-        <div class="card">
-            <h3>💻 Dữ Liệu JSON Danh Sách File</h3>
-            <pre id="jsonOutput">[]</pre>
-        </div>
-
-        <!-- Card 3: Danh Sách File -->
-        <div class="card" style="width: 93%;">
-            <h3>📋 Danh Sách Bài Giảng & Tài Liệu 
-                <button onclick="fetchFiles()" class="btn-blue" style="float: right;">🔄 Tải lại</button>
-            </h3>
-            <ul id="fileList">
-                <li>Đang tải danh sách...</li>
-            </ul>
-        </div>
+  <div class="container py-5">
+    <div class="text-center mb-5">
+      <h1 class="fw-bold text-primary">Hệ Thống Ký Số & Quản Lý Bài Giảng</h1>
+      <p class="text-muted">Tích hợp Chữ Ký Số RSA & Trợ Lý AI Agent Auto-Signing</p>
     </div>
 
-    <script>
-        // THAY ĐƯỜNG DẪN RENDER CỦA BẠN VÀO ĐÂY (không có dấu / ở cuối)
-        const API_BASE_URL = "https://digital-signature-ai-agent.onrender.com"; 
+    <div class="row g-4">
+      <!-- Cột Tải Bài Giảng Mới -->
+      <div class="col-md-6">
+        <div class="card p-4 h-100">
+          <h4 class="fw-bold mb-3">📁 Tải Bài Giảng Mới (Tự Động Ký Số RSA)</h4>
+          <form id="uploadForm">
+            <div class="mb-3">
+              <input type="file" class="form-control" id="fileInput" required>
+            </div>
+            <button type="submit" class="btn btn-success w-100 fw-bold py-2" id="uploadBtn">
+              ⬆️ Upload & Ký Số Ngay
+            </button>
+          </form>
+          <div id="uploadStatus" class="mt-3"></div>
+        </div>
+      </div>
 
-        // Hàm lấy danh sách file từ Backend
-        async function fetchFiles() {
-            try {
-                const res = await fetch(`${API_BASE_URL}/files`);
-                const data = await res.json();
-                
-                // Hiển thị JSON
-                document.getElementById('jsonOutput').textContent = JSON.stringify(data, null, 2);
+      <!-- Cột Xem Dữ Liệu JSON -->
+      <div class="col-md-6">
+        <div class="card p-4 h-100">
+          <h4 class="fw-bold mb-3">🖥️ Dữ Liệu JSON Danh Sách File</h4>
+          <pre id="jsonOutput" class="json-box">[]</pre>
+        </div>
+      </div>
+    </div>
 
-                // Hiển thị Danh sách UI
-                const listEl = document.getElementById('fileList');
-                listEl.innerHTML = '';
+    <!-- Danh Sách Bài Giảng & Tài Liệu -->
+    <div class="card p-4 mt-4">
+      <div class="d-flex justify-content-between align-items-center mb-3">
+        <h4 class="fw-bold mb-0">📋 Danh Sách Bài Giảng & Tài Liệu</h4>
+        <button class="btn btn-outline-primary btn-sm" onclick="loadFiles()">🔄 Tải lại</button>
+      </div>
+      <div id="fileListContainer">
+        <p class="text-muted">Đang tải danh sách bài giảng...</p>
+      </div>
+    </div>
+  </div>
 
-                if (!data || data.length === 0) {
-                    listEl.innerHTML = '<li>Chưa có bài giảng nào trên hệ thống.</li>';
-                    return;
-                }
+  <script>
+    // URL Backend Deploy trên Render
+    const API_URL = "https://digital-signature-ai-agent.onrender.com";
 
-                data.forEach(item => {
-                    const li = document.createElement('li');
-                    li.innerHTML = `
-                        <span>📄 <b>${item.filename}</b> (${(item.size / 1024).toFixed(1)} KB)</span>
-                        <a href="${API_BASE_URL}/files/${item.filename}" target="_blank">
-                            <button class="btn-blue">Tải về / Xem</button>
-                        </a>
-                    `;
-                    listEl.appendChild(li);
-                });
-            } catch (err) {
-                console.error("Lỗi khi tải danh sách file:", err);
-                document.getElementById('fileList').innerHTML = '<li style="color:red;">Không thể kết nối đến máy chủ Backend!</li>';
-            }
+    // 1. Tải danh sách file từ API
+    async function loadFiles() {
+      const container = document.getElementById("fileListContainer");
+      const jsonBox = document.getElementById("jsonOutput");
+
+      try {
+        const res = await fetch(`${API_URL}/files`);
+        if (!res.ok) throw new Error("Không thể kết nối đến máy chủ Backend.");
+
+        const files = await res.json();
+        jsonBox.textContent = JSON.stringify(files, null, 2);
+
+        if (files.length === 0) {
+          container.innerHTML = `<div class="alert alert-secondary text-center mb-0">Chưa có bài giảng nào trên hệ thống.</div>`;
+          return;
         }
 
-        // Xử lý Upload file
-        document.getElementById('uploadForm').addEventListener('submit', async (e) => {
-            e.preventDefault();
-            const fileInput = document.getElementById('fileInput');
-            if (!fileInput.files[0]) return;
-
-            const formData = new FormData();
-            formData.append('file', fileInput.files[0]);
-
-            const statusEl = document.getElementById('uploadStatus');
-            statusEl.innerText = "Đang tải lên và ký số...";
-
-            try {
-                const res = await fetch(`${API_BASE_URL}/upload`, {
-                    method: 'POST',
-                    body: formData
-                });
-                const result = await res.json();
-
-                if (res.ok) {
-                    statusEl.innerText = result.message;
-                    fileInput.value = ''; // Reset ô chọn file
-                    fetchFiles(); // TỰ ĐỘNG CẬP NHẬT LẠI DANH SÁCH FILE NGAY LẬP TỨC!
-                } else {
-                    statusEl.innerText = "Lỗi: " + (result.detail || "Không thể tải file lên.");
-                }
-            } catch (err) {
-                console.error(err);
-                statusEl.innerText = "Lỗi kết nối máy chủ!";
-            }
+        let html = `<ul class="list-group">`;
+        files.forEach(file => {
+          const sizeKB = (file.size / 1024).toFixed(1);
+          html += `
+            <li class="list-group-item d-flex justify-content-between align-items-center py-3">
+              <div>
+                <strong class="text-dark">${file.filename}</strong>
+                <span class="badge bg-light text-dark border ms-2">${sizeKB} KB</span>
+              </div>
+              <div>
+                <a href="${API_URL}/files/${file.filename}" class="btn btn-sm btn-primary me-2" download>
+                  📥 Tải về
+                </a>
+                <button class="btn btn-sm btn-outline-danger" onclick="deleteFile('${file.filename}')">
+                  🗑️ Xóa
+                </button>
+              </div>
+            </li>
+          `;
         });
+        html += `</ul>`;
+        container.innerHTML = html;
 
-        // Tự động gọi tải danh sách lần đầu khi vừa mở trang
-        window.onload = fetchFiles;
-    </script>
+      } catch (err) {
+        container.innerHTML = `<div class="alert alert-danger mb-0">Lỗi: ${err.message}</div>`;
+      }
+    }
+
+    // 2. Xử lý Upload & Ký Số
+    document.getElementById("uploadForm").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const fileInput = document.getElementById("fileInput");
+      const statusDiv = document.getElementById("uploadStatus");
+      const uploadBtn = document.getElementById("uploadBtn");
+
+      if (!fileInput.files[0]) return;
+
+      const formData = new FormData();
+      formData.append("file", fileInput.files[0]);
+
+      uploadBtn.disabled = true;
+      uploadBtn.innerHTML = `⏳ Đang xử lý & ký số...`;
+      statusDiv.innerHTML = `<div class="text-primary fw-bold">Đang tải file lên và thực hiện ký số RSA...</div>`;
+
+      try {
+        const res = await fetch(`${API_URL}/upload`, {
+          method: "POST",
+          body: formData
+        });
+        const data = await res.json();
+
+        if (res.ok) {
+          statusDiv.innerHTML = `<div class="alert alert-success mt-2">${data.message}</div>`;
+          fileInput.value = "";
+          loadFiles();
+        } else {
+          statusDiv.innerHTML = `<div class="alert alert-danger mt-2">Lỗi: ${data.detail || "Không thể tải lên."}</div>`;
+        }
+      } catch (err) {
+        statusDiv.innerHTML = `<div class="alert alert-danger mt-2">Lỗi kết nối: ${err.message}</div>`;
+      } finally {
+        uploadBtn.disabled = false;
+        uploadBtn.innerHTML = `⬆️ Upload & Ký Số Ngay`;
+      }
+    });
+
+    // 3. Xử lý Xóa file
+    async function deleteFile(filename) {
+      if (!confirm(`Bạn có chắc chắn muốn xóa file "${filename}" khỏi hệ thống?`)) return;
+
+      try {
+        const res = await fetch(`${API_URL}/delete/${filename}`, {
+          method: "DELETE"
+        });
+        const data = await res.json();
+
+        if (res.ok) {
+          alert(data.message);
+          loadFiles();
+        } else {
+          alert("Lỗi khi xóa: " + (data.detail || "Không thể xóa file."));
+        }
+      } catch (err) {
+        alert("Lỗi kết nối máy chủ: " + err.message);
+      }
+    }
+
+    // Tự động tải danh sách file khi vào trang
+    loadFiles();
+  </script>
+
 </body>
 </html>
