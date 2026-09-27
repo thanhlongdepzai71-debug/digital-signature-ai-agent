@@ -1,6 +1,7 @@
 import os
 import glob
 import logging
+import json
 from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
@@ -13,7 +14,7 @@ from cryptography.hazmat.primitives.serialization import load_pem_private_key, l
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-app = FastAPI(title="Digital Signature Lecture Manager API", version="2.2.0")
+app = FastAPI(title="Digital Signature Lecture Manager API", version="2.3.0")
 
 # Bật CORS cho phép kết nối từ mọi nguồn (GitHub Pages)
 app.add_middleware(
@@ -33,29 +34,35 @@ class DeleteRequest(BaseModel):
     password: str
 
 
-# --- HÀM HỖ TRỢ KÝ SỐ TỰ ĐỘNG RSA SHA-256 ---
+# --- HÀM HỖ TRỢ KÝ SỐ TỰ ĐỘNG RSA SHA-256 (CÓ LOG BÁO LỖI CHI TIẾT) ---
 def auto_sign_file(file_path: str):
     if not os.path.exists(PRIVATE_KEY_PATH):
-        return  # Bỏ qua nếu chưa cấu hình key trên server
+        logger.error(f"LỖI: Không tìm thấy file khóa bí mật tại đường dẫn: {PRIVATE_KEY_PATH}")
+        return
 
-    with open(PRIVATE_KEY_PATH, "rb") as key_file:
-        private_key = load_pem_private_key(key_file.read(), password=None)
+    try:
+        with open(PRIVATE_KEY_PATH, "rb") as key_file:
+            private_key = load_pem_private_key(key_file.read(), password=None)
 
-    with open(file_path, "rb") as f:
-        file_data = f.read()
+        with open(file_path, "rb") as f:
+            file_data = f.read()
 
-    signature = private_key.sign(
-        file_data,
-        padding.PSS(
-            mgf=padding.MGF1(hashes.SHA256()),
-            salt_length=padding.PSS.MAX_LENGTH
-        ),
-        hashes.SHA256()
-    )
+        signature = private_key.sign(
+            file_data,
+            padding.PSS(
+                mgf=padding.MGF1(hashes.SHA256()),
+                salt_length=padding.PSS.MAX_LENGTH
+            ),
+            hashes.SHA256()
+        )
 
-    sig_path = f"{file_path}.sig"
-    with open(sig_path, "wb") as sig_file:
-        sig_file.write(signature)
+        sig_path = f"{file_path}.sig"
+        with open(sig_path, "wb") as sig_file:
+            sig_file.write(signature)
+        
+        logger.info(f"Đã tạo thành công chữ ký số cho file: {file_path}")
+    except Exception as e:
+        logger.error(f"LỖI trong quá trình ký số file {file_path}: {e}")
 
 
 @app.get("/")
@@ -116,9 +123,7 @@ def export_signed_list_json():
                     "signature_filename": f"{file}.sig"
                 })
     
-    # Trả về dưới dạng file JSON để trình duyệt tự động tải xuống
     json_file_path = os.path.join(BASE_DIR, "signed_lectures_report.json")
-    import json
     with open(json_file_path, "w", encoding="utf-8") as jf:
         json.dump(signed_records, jf, ensure_ascii=False, indent=4)
         
@@ -178,11 +183,11 @@ def verify_signature(file_name: str):
             "message": f"Xác thực thành công! Tệp '{file_name}' hợp lệ và giữ nguyên tính toàn vẹn chữ ký số RSA."
         }
 
-    except Exception:
+    except Exception as e:
         return {
             "status": "REJECTED",
             "valid": False,
-            "message": f"Xác thực thất bại! Tệp '{file_name}' đã bị chỉnh sửa hoặc chữ ký không khớp."
+            "message": f"Xác thực thất bại! Tệp '{file_name}' đã bị chỉnh sửa hoặc chữ ký không khớp. (Lỗi: {e})"
         }
 
 
