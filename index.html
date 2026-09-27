@@ -31,16 +31,17 @@
             border-radius: 12px 12px 0 0 !important;
             padding: 1rem 1.25rem;
         }
-        .status-badge {
-            font-size: 0.85rem;
-            padding: 0.35em 0.65em;
-            border-radius: 6px;
-        }
-        .file-item {
-            transition: all 0.2s ease;
-        }
         .file-item:hover {
             background-color: #f8f9fa;
+        }
+        pre {
+            background-color: #1e1e1e;
+            color: #d4d4d4;
+            padding: 15px;
+            border-radius: 8px;
+            max-height: 250px;
+            overflow-y: auto;
+            font-size: 0.85rem;
         }
     </style>
 </head>
@@ -90,13 +91,18 @@
                     </div>
                 </div>
 
-                <!-- Thẻ Danh Sách Bài Giảng Audio -->
+                <!-- Thẻ Danh Sách Bài Giảng Audio & Nút xuất JSON -->
                 <div class="card">
                     <div class="card-header d-flex justify-content-between align-items-center text-success">
                         <span><i class="bi bi-music-note-list"></i> Danh Sách Bài Giảng Âm Thanh</span>
-                        <button class="btn btn-sm btn-outline-success" id="btnRefreshList">
-                            <i class="bi bi-arrow-clockwise"></i> Tải lại
-                        </button>
+                        <div>
+                            <button class="btn btn-sm btn-outline-dark me-1" onclick="downloadJsonFile()">
+                                <i class="bi bi-filetype-json"></i> Tải JSON
+                            </button>
+                            <button class="btn btn-sm btn-outline-success" id="btnRefreshList">
+                                <i class="bi bi-arrow-clockwise"></i> Tải lại
+                            </button>
+                        </div>
                     </div>
                     <div class="card-body p-0">
                         <div id="audioListContainer" class="list-group list-group-flush border-top-0">
@@ -109,9 +115,9 @@
                 </div>
             </div>
 
-            <!-- Cột phải: Trình phát / Trình xem tài liệu & Thông tin -->
+            <!-- Cột phải: Trình phát & Khung xem Dữ Liệu JSON -->
             <div class="col-lg-5">
-                <!-- Trình Phát & Xem Tài Liệu -->
+                <!-- Trình Phát Bài Giảng -->
                 <div class="card">
                     <div class="card-header text-dark">
                         <i class="bi bi-play-circle"></i> Trình Xem & Phát Bài Giảng
@@ -124,19 +130,15 @@
                     </div>
                 </div>
 
-                <!-- Thẻ Trợ Lý AI Agent Status -->
+                <!-- Thẻ Dữ Liệu JSON Danh Sách File -->
                 <div class="card">
-                    <div class="card-header text-info">
-                        <i class="bi bi-robot"></i> Trạng Thái Trợ Lý AI Agent
+                    <div class="card-header text-warning d-flex justify-content-between align-items-center">
+                        <span><i class="bi bi-code-slash"></i> Dữ Liệu JSON Trả Về Từ API</span>
+                        <a id="rawJsonLink" href="#" target="_blank" class="btn btn-sm btn-link text-decoration-none p-0">Mở URL API <i class="bi bi-box-arrow-up-right"></i></a>
                     </div>
                     <div class="card-body">
-                        <div class="d-flex align-items-center mb-2">
-                            <span class="badge bg-success rounded-circle p-1 me-2"><span class="visually-hidden">Active</span></span>
-                            <span class="fw-semibold">AI Agent tự động kiểm tra chữ ký số:</span>
-                        </div>
-                        <p class="text-muted small">
-                            Mỗi khi bạn thực hiện yêu cầu tải bài giảng hoặc kiểm tra tài liệu, AI Agent sẽ tự động đối chiếu tệp chữ ký số <code>.sig</code> tương ứng bằng thuật toán RSA SHA-256 để đưa ra quyết định <b>ACCEPTED</b> hoặc <b>REJECTED</b>.
-                        </p>
+                        <p class="text-muted small mb-2">Định dạng JSON danh sách file audio trả về từ endpoint <code>/download-audio-list</code>:</p>
+                        <pre id="jsonPreview"><code>Đang tải dữ liệu JSON...</code></pre>
                     </div>
                 </div>
             </div>
@@ -147,13 +149,13 @@
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 
     <script>
-        // Địa chỉ Cloud Server Backend trên Render.com
         const API_BASE = "https://digital-signature-ai-agent.onrender.com";
+        let currentAudioJson = [];
 
         document.addEventListener("DOMContentLoaded", () => {
             fetchAudioList();
+            document.getElementById("rawJsonLink").href = `${API_BASE}/download-audio-list`;
 
-            // Đăng ký sự kiện submit form Xác thực
             document.getElementById("verifyForm").addEventListener("submit", async (e) => {
                 e.preventDefault();
                 const fileName = document.getElementById("fileNameInput").value.trim();
@@ -162,7 +164,6 @@
                 }
             });
 
-            // Đăng ký sự kiện nút Tải lại danh sách
             document.getElementById("btnRefreshList").addEventListener("click", fetchAudioList);
         });
 
@@ -201,7 +202,7 @@
                 resultAlert.className = "alert alert-warning d-flex align-items-center";
                 resultIcon.className = "bi bi-exclamation-triangle-fill me-2 fs-4 text-warning";
                 resultTitle.innerText = "Lỗi Kết Nối Server";
-                resultMessage.innerText = "Không thể kết nối tới Backend AI Agent trên Render. Hãy đảm bảo Server đang hoạt động.";
+                resultMessage.innerText = "Không thể kết nối tới Backend AI Agent trên Render.";
             } finally {
                 btnVerify.disabled = false;
                 btnVerify.innerHTML = `<i class="bi bi-search"></i> Xác Thực`;
@@ -211,9 +212,14 @@
         // Hàm lấy danh sách bài giảng âm thanh (/download-audio-list)
         async function fetchAudioList() {
             const container = document.getElementById("audioListContainer");
+            const jsonPreview = document.getElementById("jsonPreview");
+
             try {
                 const response = await fetch(`${API_BASE}/download-audio-list`);
                 const data = await response.json();
+                
+                currentAudioJson = data;
+                jsonPreview.textContent = JSON.stringify(data, null, 2);
 
                 container.innerHTML = "";
 
@@ -249,10 +255,22 @@
             } catch (error) {
                 console.error("Lỗi lấy danh sách bài giảng:", error);
                 container.innerHTML = `<div class="p-3 text-center text-danger"><i class="bi bi-exclamation-circle me-1"></i> Không thể tải danh sách bài giảng từ Server.</div>`;
+                jsonPreview.textContent = "// Lỗi không thể tải JSON từ Server";
             }
         }
 
-        // Phát bài giảng trên trình duyệt
+        // Tải xuống file .json trực tiếp
+        function downloadJsonFile() {
+            const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(currentAudioJson, null, 2));
+            const downloadAnchor = document.createElement('a');
+            downloadAnchor.setAttribute("href", dataStr);
+            downloadAnchor.setAttribute("download", "audio_list.json");
+            document.body.appendChild(downloadAnchor);
+            downloadAnchor.click();
+            downloadAnchor.remove();
+        }
+
+        // Phát bài giảng
         function playAudio(fileName) {
             const playerContainer = document.getElementById("mediaPlayerContainer");
             playerContainer.innerHTML = `
@@ -264,7 +282,7 @@
             `;
         }
 
-        // Xác minh nhanh từ danh sách
+        // Xác minh nhanh
         function quickVerify(fileName) {
             document.getElementById("fileNameInput").value = fileName;
             verifyFile(fileName);
