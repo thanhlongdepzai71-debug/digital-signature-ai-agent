@@ -19,8 +19,9 @@ from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
 from pyhanko.sign import fields, signers
 from pyhanko.sign.fields import SigFieldSpec
 
-# Xử lý ký nhúng cho DOCX (OpenXML Signature)
+# Ký nhúng cho Word & PowerPoint
 import docx
+import pptx
 
 app = FastAPI(title="Hệ Thống Ký Số RSA & Quản Lý Bài Giảng API")
 
@@ -140,7 +141,7 @@ async def upload_file(
         audio.add(TXXX(encoding=3, desc="DIGITAL_SIGNATURE_MANIFEST", text=json.dumps(manifest, ensure_ascii=False)))
         audio.save(raw_path)
 
-        return {"message": f"Đã nhúng Chữ ký số thành công vào file MP3!", "filename": file.filename}
+        return {"message": "Đã nhúng Chữ ký số thành công vào file MP3!", "filename": file.filename}
 
     # 2. KÝ NHÚNG TRỰC TIẾP VÀO PDF (NATIVE PKCS#7 / PAdES)
     elif ext == ".pdf":
@@ -170,35 +171,52 @@ async def upload_file(
         if os.path.exists(temp_in):
             os.remove(temp_in)
 
-        return {"message": f"Đã nhúng Chữ ký số PKCS#7 trực tiếp vào tệp PDF!", "filename": file.filename}
+        return {"message": "Đã nhúng Chữ ký số PKCS#7 trực tiếp vào tệp PDF!", "filename": file.filename}
 
-    # 3. KÝ NHÚNG TRỰC TIẾP VÀO DOCX (CUSTOM DOCUMENT PROPERTIES METADATA)
+    # 3. KÝ NHÚNG TRỰC TIẾP VÀO DOCX (Core Properties Metadata)
     elif ext == ".docx":
         temp_docx = os.path.join(SIGNED_DIR, f"temp_{file.filename}")
         with open(temp_docx, "wb") as f:
             f.write(file_bytes)
 
-        # Đọc private key tính signature
         with open(key_p, "rb") as kf:
             private_key = serialization.load_pem_private_key(kf.read(), password=None)
         signature = private_key.sign(file_bytes, padding.PKCS1v15(), hashes.SHA256())
 
-        # Mở file Docx và chèn trực tiếp Metadata người ký vào thuộc tính Document Properties
         doc = docx.Document(temp_docx)
         doc.core_properties.author = signer_name
-        doc.core_properties.comments = f"Digital Signature RSA-SHA256 | Signed by {signer_name} at {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S UTC')} | SigHex: {signature.hex()[:32]}..."
+        doc.core_properties.comments = f"Digital Signature RSA-SHA256 | Signer: {signer_name} | SignedAt: {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S UTC')} | SigHex: {signature.hex()}"
         doc.save(raw_path)
 
         if os.path.exists(temp_docx):
             os.remove(temp_docx)
 
-        return {"message": f"Đã nhúng Chữ ký số RSA trực tiếp vào thuộc tính của tệp DOCX!", "filename": file.filename}
+        return {"message": "Đã nhúng Chữ ký số RSA trực tiếp vào tệp DOCX!", "filename": file.filename}
+
+    # 4. KÝ NHÚNG TRỰC TIẾP VÀO PPTX (Core Properties Metadata)
+    elif ext == ".pptx":
+        temp_pptx = os.path.join(SIGNED_DIR, f"temp_{file.filename}")
+        with open(temp_pptx, "wb") as f:
+            f.write(file_bytes)
+
+        with open(key_p, "rb") as kf:
+            private_key = serialization.load_pem_private_key(kf.read(), password=None)
+        signature = private_key.sign(file_bytes, padding.PKCS1v15(), hashes.SHA256())
+
+        prs = pptx.Presentation(temp_pptx)
+        prs.core_properties.author = signer_name
+        prs.core_properties.comments = f"Digital Signature RSA-SHA256 | Signer: {signer_name} | SignedAt: {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S UTC')} | SigHex: {signature.hex()}"
+        prs.save(raw_path)
+
+        if os.path.exists(temp_pptx):
+            os.remove(temp_pptx)
+
+        return {"message": "Đã nhúng Chữ ký số RSA trực tiếp vào tệp PPTX!", "filename": file.filename}
 
     else:
-        # Với các định dạng khác, lưu nguyên tệp
         with open(raw_path, "wb") as f:
             f.write(file_bytes)
-        return {"message": f"Đã tải lên tệp {file.filename}", "filename": file.filename}
+        return {"message": f"Đã lưu tệp {file.filename}", "filename": file.filename}
 
 
 @app.delete("/delete/{filename}")
