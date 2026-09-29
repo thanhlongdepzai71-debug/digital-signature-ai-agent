@@ -1,6 +1,7 @@
 fastapi
 uvicorn
 python-multipart
-pyhanko
 cryptography
 mutagen
+pyhanko
+python-docx
