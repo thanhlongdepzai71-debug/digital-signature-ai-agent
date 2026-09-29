@@ -5,3 +5,4 @@ cryptography
 mutagen
 pyhanko
 python-docx
+python-pptx
