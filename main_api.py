@@ -1,28 +1,29 @@
 import os
 import json
-import zipfile
 from datetime import datetime, timezone, timedelta
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
-# Thư viện Cryptography & X.509
+# Cryptography & X.509
 from cryptography import x509
 from cryptography.x509.oid import NameOID
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import rsa, padding
 
-# Thư viện ID3 cho MP3
+# ID3 Tag cho MP3
 from mutagen.id3 import ID3, TXXX, ID3NoHeaderError
 
-# Thư viện Ký PDF
+# Ký số chuẩn PKCS#7 cho PDF (PyHanko)
 from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
 from pyhanko.sign import fields, signers
+from pyhanko.sign.fields import SigFieldSpec
 
-# KHỞI TẠO BIẾN APP BẮT BUỘC ĐỂ UVICORN BẮT ĐƯỢC
+# Xử lý ký nhúng cho DOCX (OpenXML Signature)
+import docx
+
 app = FastAPI(title="Hệ Thống Ký Số RSA & Quản Lý Bài Giảng API")
 
-# Cấu hình CORS
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -45,7 +46,6 @@ CERT_PATH = os.path.join(KEYS_DIR, "certificate.pem")
 
 
 def ensure_keys_exist(signer_name: str = "Diệp Thành Long"):
-    """Tạo Private Key và Certificate chứa thông tin người ký"""
     if not os.path.exists(KEY_PATH) or not os.path.exists(CERT_PATH):
         private_key = rsa.generate_private_key(
             public_exponent=65537,
@@ -97,27 +97,26 @@ def get_files():
 
 
 @app.post("/upload")
-def upload_file(
+async def upload_file(
     file: UploadFile = File(...),
     signer_name: str = Form("Diệp Thành Long"),
     signature_type: str = Form("RSA-SHA256 (CAdES-Basic)")
 ):
     key_p, cert_p = ensure_keys_exist(signer_name)
     raw_path = os.path.join(SIGNED_DIR, file.filename)
-
-    with open(raw_path, "wb") as f:
-        f.write(file.file.read())
+    file_bytes = await file.read()
 
     ext = os.path.splitext(file.filename)[1].lower()
 
+    # 1. KÝ NHÚNG TRỰC TIẾP VÀO MP3 (ID3 Metadata)
     if ext == ".mp3":
-        with open(raw_path, "rb") as f:
-            file_data = f.read()
+        with open(raw_path, "wb") as f:
+            f.write(file_bytes)
 
         with open(key_p, "rb") as kf:
             private_key = serialization.load_pem_private_key(kf.read(), password=None)
 
-        signature = private_key.sign(file_data, padding.PKCS1v15(), hashes.SHA256())
+        signature = private_key.sign(file_bytes, padding.PKCS1v15(), hashes.SHA256())
 
         with open(cert_p, "r") as cf:
             cert_pem = cf.read()
@@ -141,9 +140,65 @@ def upload_file(
         audio.add(TXXX(encoding=3, desc="DIGITAL_SIGNATURE_MANIFEST", text=json.dumps(manifest, ensure_ascii=False)))
         audio.save(raw_path)
 
-        return {"message": f"Đã nhúng Chữ ký số RSA + Tên người ký ({signer_name}) trực tiếp vào ID3 Tag của tệp MP3!", "filename": file.filename}
+        return {"message": f"Đã nhúng Chữ ký số thành công vào file MP3!", "filename": file.filename}
 
-    return {"message": "Đã lưu tệp!", "filename": file.filename}
+    # 2. KÝ NHÚNG TRỰC TIẾP VÀO PDF (NATIVE PKCS#7 / PAdES)
+    elif ext == ".pdf":
+        temp_in = os.path.join(SIGNED_DIR, f"temp_{file.filename}")
+        with open(temp_in, "wb") as f:
+            f.write(file_bytes)
+
+        signer = signers.SimpleSigner.load(
+            key_file=key_p,
+            cert_file=cert_p,
+            key_passphrase=None
+        )
+
+        with open(temp_in, "rb") as inf:
+            w = IncrementalPdfFileWriter(inf)
+            fields.append_signature_field(
+                w, sigfield_spec=SigFieldSpec(sig_field_name="Signature1")
+            )
+            with open(raw_path, "wb") as outf:
+                await signers.async_sign_pdf(
+                    w,
+                    signers.PdfSignatureMetadata(field_name="Signature1", reason="Digital Signature Authentication"),
+                    signer=signer,
+                    output=outf
+                )
+
+        if os.path.exists(temp_in):
+            os.remove(temp_in)
+
+        return {"message": f"Đã nhúng Chữ ký số PKCS#7 trực tiếp vào tệp PDF!", "filename": file.filename}
+
+    # 3. KÝ NHÚNG TRỰC TIẾP VÀO DOCX (CUSTOM DOCUMENT PROPERTIES METADATA)
+    elif ext == ".docx":
+        temp_docx = os.path.join(SIGNED_DIR, f"temp_{file.filename}")
+        with open(temp_docx, "wb") as f:
+            f.write(file_bytes)
+
+        # Đọc private key tính signature
+        with open(key_p, "rb") as kf:
+            private_key = serialization.load_pem_private_key(kf.read(), password=None)
+        signature = private_key.sign(file_bytes, padding.PKCS1v15(), hashes.SHA256())
+
+        # Mở file Docx và chèn trực tiếp Metadata người ký vào thuộc tính Document Properties
+        doc = docx.Document(temp_docx)
+        doc.core_properties.author = signer_name
+        doc.core_properties.comments = f"Digital Signature RSA-SHA256 | Signed by {signer_name} at {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S UTC')} | SigHex: {signature.hex()[:32]}..."
+        doc.save(raw_path)
+
+        if os.path.exists(temp_docx):
+            os.remove(temp_docx)
+
+        return {"message": f"Đã nhúng Chữ ký số RSA trực tiếp vào thuộc tính của tệp DOCX!", "filename": file.filename}
+
+    else:
+        # Với các định dạng khác, lưu nguyên tệp
+        with open(raw_path, "wb") as f:
+            f.write(file_bytes)
+        return {"message": f"Đã tải lên tệp {file.filename}", "filename": file.filename}
 
 
 @app.delete("/delete/{filename}")
@@ -153,48 +208,3 @@ def delete_file(filename: str):
         os.remove(file_path)
         return {"message": "Đã xóa file thành công!"}
     raise HTTPException(status_code=404, detail="File không tồn tại.")
-
-
-@app.post("/verify-mp3")
-def verify_mp3_signature(file: UploadFile = File(...)):
-    temp_path = os.path.join(SIGNED_DIR, f"temp_v_{file.filename}")
-    with open(temp_path, "wb") as f:
-        f.write(file.file.read())
-
-    try:
-        audio = ID3(temp_path)
-        manifest_json = None
-
-        for frame in audio.getall("TXXX"):
-            if frame.desc == "DIGITAL_SIGNATURE_MANIFEST":
-                manifest_json = frame.text[0]
-
-        if not manifest_json:
-            os.remove(temp_path)
-            return {"valid": False, "message": "Không tìm thấy Chữ ký số RSA nhúng trong ID3 Tag!"}
-
-        manifest = json.loads(manifest_json)
-        sig_hex = manifest.get("signature_hex")
-        cert_pem = manifest.get("certificate_pem")
-        signer_info = manifest.get("signer_info")
-
-        cert = x509.load_pem_x509_certificate(cert_pem.encode())
-        public_key = cert.public_key()
-        signature = bytes.fromhex(sig_hex)
-
-        with open(temp_path, "rb") as f:
-            data = f.read()
-
-        public_key.verify(signature, data, padding.PKCS1v15(), hashes.SHA256())
-        os.remove(temp_path)
-
-        return {
-            "valid": True,
-            "message": "Chữ ký hợp lệ! Dữ liệu MP3 đảm bảo tính toàn vẹn và nguồn gốc.",
-            "signer_info": signer_info
-        }
-
-    except Exception as e:
-        if os.path.exists(temp_path):
-            os.remove(temp_path)
-        return {"valid": False, "message": f"Xác thực thất bại: {str(e)}"}
