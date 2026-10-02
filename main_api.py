@@ -158,8 +158,8 @@ async def upload_file(
         with open(temp_in, "rb") as inf:
             w = IncrementalPdfFileWriter(inf)
             fields.append_signature_field(
-                w, sigfield_spec=SigFieldSpec(sig_field_name="Signature1")
-            )
+            w, sig_field_spec=SigFieldSpec(sig_field_name="Signature1")
+        )
             with open(raw_path, "wb") as outf:
                 await signers.async_sign_pdf(
                     w,
